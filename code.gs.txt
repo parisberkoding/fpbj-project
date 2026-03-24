@@ -1,0 +1,570 @@
+/**
+ * Code.gs - Main Entry Point
+ * SLIP ROUTING SYSTEM - PT. GEO DIPA ENERGI (PERSERO)
+ * Pure ES5 - no arrow functions, no spread, no destructuring
+ *
+ * ROLES:
+ *   USER       - Pengusul: buat rencana, input PR SAP / PO SAP / SA-GR, upload dokumen
+ *   TIM_SURVEY - Market Survey: review harga & referensi vendor
+ *   SCM        - Procurement: update progress & notes pengadaan
+ *   GM         - General Manager: approve / reject dokumen
+ */
+
+var SPREADSHEET_ID = '1weCR3-pS2d7f2d5VYCjEw9ihTQvOGsNZjWkpauBcwQQ';
+
+var SHEETS = {
+  USERS:           'Users',
+  SESSIONS:        'Sessions',
+  RENCANA:         'Rencana',
+  RENCANA_STATUS:  'Rencana_Status',
+  TENDER:          'Tender',
+  TENDER_STATUS:   'Tender_Status',
+  CONTRACT:        'Contract',
+  CONTRACT_STATUS: 'Contract_Status',
+  DELIVERY:        'Delivery',
+  DELIVERY_STATUS: 'Delivery_Status',
+  AUDIT_LOG:       'Audit_Log'
+};
+
+var ROLES = {
+  USER:       'USER',
+  TIM_SURVEY: 'TIM_SURVEY',
+  SCM:        'SCM',
+  GM:         'GM'
+};
+
+var DOC_STATUS = {
+  DRAFT:         'DRAFT',
+  PENDING:       'PENDING',
+  PEER_REVIEWED: 'PEER_REVIEWED',
+  REVIEWED:      'REVIEWED',
+  APPROVED:      'APPROVED',
+  REVISED:       'REVISED',
+  REJECTED:      'REJECTED'
+};
+
+// ============================================================
+// TRIGGER & MENU
+// ============================================================
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('Slip Routing')
+    .addItem('Buka Aplikasi', 'openWebApp')
+    .addItem('Lihat URL App', 'getAppUrl')
+    .addSeparator()
+    .addItem('Setup / Seed Data Awal', 'setupAndSeed')
+    .addItem('Reset Sessions', 'resetSessions')
+    .addToUi();
+}
+
+function openWebApp() {
+  var url  = ScriptApp.getService().getUrl();
+  var html = HtmlService.createHtmlOutput(
+    '<script>window.open("' + url + '","_blank");google.script.host.close();<\/script>'
+  ).setWidth(1).setHeight(1);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Membuka...');
+}
+
+function getAppUrl() {
+  var url = ScriptApp.getService().getUrl();
+  SpreadsheetApp.getUi().alert('URL Aplikasi:\n\n' + url);
+}
+
+// ============================================================
+// WEB APP ENTRY POINT
+// ============================================================
+
+function doGet(e) {
+  _autoSeedIfEmpty();
+
+  var page  = (e && e.parameter && e.parameter.page)  ? e.parameter.page  : 'login';
+  var token = (e && e.parameter && e.parameter.token) ? e.parameter.token : '';
+  var url   = ScriptApp.getService().getUrl();
+
+  if (page === 'login' || !token) {
+    var t = HtmlService.createTemplateFromFile('login');
+    t.webAppUrl = url;
+    return t.evaluate()
+      .setTitle('Slip Routing - Login')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  var session = verifySession(token);
+  if (!session) {
+    var t2 = HtmlService.createTemplateFromFile('login');
+    t2.webAppUrl = url;
+    return t2.evaluate()
+      .setTitle('Slip Routing - Login')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  var tmpl = HtmlService.createTemplateFromFile('maincontent');
+  tmpl.initialPage = page;
+  tmpl.sessionJson = JSON.stringify(session);
+  tmpl.webAppUrl   = url;
+  return tmpl.evaluate()
+    .setTitle('Slip Routing - PT. Geo Dipa Energi')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function doPost(e) {
+  try {
+    var body   = JSON.parse(e.postData.contents);
+    var action = body.action;
+    var token  = body.token ? body.token : '';
+
+    if (action === 'login')  return jsonResponse(_handleLogin(body));
+    if (action === 'logout') return jsonResponse(_handleLogout(token));
+
+    var session = verifySession(token);
+    if (!session) return jsonResponse({ success: false, message: 'Sesi tidak valid.' });
+
+    var result = _routeAction(action, session, body);
+    writeAuditLog(session, action, body);
+    return jsonResponse(result);
+
+  } catch (err) {
+    Logger.log('doPost Error: ' + err.message);
+    return jsonResponse({ success: false, message: 'Server error: ' + err.message });
+  }
+}
+
+// ============================================================
+// GOOGLE.SCRIPT.RUN BRIDGE
+// ============================================================
+
+function handleLogin(payload) {
+  try {
+    if (!payload) return { success: false, message: 'Payload kosong.' };
+    var result = _handleLogin(payload);
+    return result || { success: false, message: 'Login gagal.' };
+  } catch (err) {
+    Logger.log('handleLogin Error: ' + err.message);
+    return { success: false, message: 'Server error: ' + err.message };
+  }
+}
+
+function handleLogout(token) {
+  try {
+    var result = _handleLogout(token);
+    return result || { success: true };
+  } catch (err) {
+    Logger.log('handleLogout Error: ' + err.message);
+    return { success: true };
+  }
+}
+
+// ============================================================
+// SESSION MANAGEMENT
+// ============================================================
+
+/**
+ * verifySession — diperbaiki untuk handle:
+ * 1. is_active tersimpan sebagai boolean ATAU string "TRUE"/"FALSE"
+ * 2. expires_at tersimpan sebagai ISO string ATAU Date object (konversi Google Sheets)
+ */
+function verifySession(token) {
+  if (!token) return null;
+  try {
+    var sheet = getSheet(SHEETS.SESSIONS);
+    var data  = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (row[0] !== token) continue;
+
+      // FIX 1: is_active bisa boolean true/false atau string "TRUE"/"FALSE"
+      var isActive = (row[8] === true || String(row[8]).toLowerCase() === 'true');
+      if (!isActive) return null;
+
+      // FIX 2: expires_at bisa Date object (konversi otomatis Google Sheets) atau ISO string
+      var expiresAt;
+      if (row[7] instanceof Date) {
+        expiresAt = row[7];
+      } else {
+        expiresAt = new Date(row[7]);
+      }
+      if (isNaN(expiresAt.getTime())) {
+        Logger.log('verifySession: expires_at tidak valid untuk token ' + token.substring(0, 16));
+        return null;
+      }
+      if (new Date() > expiresAt) return null;
+
+      return {
+        user_id:      String(row[1]),
+        kode_user:    String(row[2]),
+        username:     String(row[3]),
+        role:         String(row[4]),
+        nama_lengkap: String(row[5]),
+        token:        token
+      };
+    }
+  } catch (err) {
+    Logger.log('verifySession Error: ' + err.message);
+  }
+  return null;
+}
+
+// ============================================================
+// ROUTER - if/else chain, no object map (avoids parser bug)
+// ============================================================
+
+function _routeAction(action, session, payload) {
+  // Auth
+  if (action === 'changePassword')        return changePassword(session, payload);
+
+  // Rencana
+  if (action === 'createRencana')         return createRencana(session, payload);
+  if (action === 'updateRencana')         return updateRencana(session, payload);
+  if (action === 'getRencanaList')        return getRencanaList(session, payload);
+  if (action === 'getRencanaDetail')      return getRencanaDetail(session, payload);
+  if (action === 'uploadDokumenRencana')  return uploadDokumenRencana(session, payload);
+  if (action === 'approveRencana')        return approveRencana(session, payload);
+  if (action === 'trackViewRencana')      return trackViewRencana(session, payload);
+
+  // SAP inputs
+  if (action === 'updateSapData')         return updateSapData(session, payload);
+
+  // Tender
+  if (action === 'createTender')          return createTender(session, payload);
+  if (action === 'updateTenderProgress')  return updateTenderProgress(session, payload);
+  if (action === 'updateTenderStatus')    return updateTenderProgress(session, payload); // alias
+  if (action === 'updatePOData')          return updatePOData(session, payload);
+  if (action === 'getTenderList')         return getTenderList(session, payload);
+  if (action === 'getTenderDetail')       return getTenderDetail(session, payload);
+  if (action === 'approveTender')         return approveTender(session, payload);
+  if (action === 'uploadDokumenTender')   return uploadDokumenTender(session, payload);
+
+  // Contract
+  if (action === 'createContract')        return createContract(session, payload);
+  if (action === 'updateContractStatus')  return updateContractStatus(session, payload);
+  if (action === 'getContractList')       return getContractList(session, payload);
+  if (action === 'getContractDetail')     return getContractDetail(session, payload);
+  if (action === 'uploadDokumenContract') return uploadDokumenContract(session, payload);
+
+  // Delivery
+  if (action === 'createDelivery')        return createDelivery(session, payload);
+  if (action === 'updateDeliveryStatus')  return updateDeliveryStatus(session, payload);
+  if (action === 'getDeliveryList')       return getDeliveryList(session, payload);
+  if (action === 'uploadDokumenDelivery') return uploadDokumenDelivery(session, payload);
+
+  // Admin - GM only
+  if (action === 'getUsers')              return getUsers(session);
+  if (action === 'createUser')            return createUser(session, payload);
+  if (action === 'updateUser')            return updateUser(session, payload);
+  if (action === 'deleteUser')            return deleteUser(session, payload);
+
+  // Dashboard & Trace
+  if (action === 'getDashboardData')      return getDashboardData(session);
+  if (action === 'getFullTrace')          return getFullTrace(session, payload);
+
+  return { success: false, message: 'Action tidak dikenali: ' + action };
+}
+
+function handleApiCall(payload) {
+  try {
+    if (!payload) return { success: false, message: 'Payload kosong.' };
+
+    var action = payload.action;
+    var token  = payload.token ? payload.token : '';
+
+    if (action === 'login')  return _handleLogin(payload);
+    if (action === 'logout') return _handleLogout(token);
+
+    var session = verifySession(token);
+    if (!session) return { success: false, message: 'Sesi tidak valid. Silakan login ulang.' };
+
+    var result = _routeAction(action, session, payload);
+
+    if (result === null || result === undefined) {
+      Logger.log('WARNING: _routeAction returned null/undefined untuk action: ' + action);
+      return { success: false, message: 'Fungsi server tidak mengembalikan hasil untuk aksi: ' + action };
+    }
+
+    try {
+      writeAuditLog(session, action, payload);
+    } catch (auditErr) {
+      Logger.log('Audit log failed (non-fatal): ' + auditErr.message);
+    }
+
+    return result;
+
+  } catch (err) {
+    Logger.log('handleApiCall Error [' + (payload ? payload.action : '?') + ']: ' + err.message);
+    return { success: false, message: 'Server error: ' + err.message };
+  }
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+function getViewHtml(filename) {
+  try {
+    var content = HtmlService.createHtmlOutputFromFile(filename).getContent();
+    content = content.replace(/<script[\s\S]*?<\/script>/gi, '');
+    content = content.replace(/<style[\s\S]*?<\/style>/gi, '');
+    content = content.replace(/<link[^>]*>/gi, '');
+    return content;
+  } catch (e) {
+    Logger.log('getViewHtml error for ' + filename + ': ' + e.message);
+    return '<div style="padding:24px;background:#fff0f0;border-radius:12px;color:#CD142C;font-family:sans-serif">' +
+      '<strong>Gagal memuat: ' + filename + '</strong><br>' + e.message + '</div>';
+  }
+}
+
+function getSpreadsheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
+
+function getSheet(name) {
+  var ss    = getSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) throw new Error('Sheet tidak ditemukan: ' + name);
+  return sheet;
+}
+
+/**
+ * resetSessions — hapus semua baris session (kecuali header)
+ * Dipanggil dari menu Spreadsheet atau manual
+ */
+function resetSessions() {
+  var sheet = getSheet(SHEETS.SESSIONS);
+  var last  = sheet.getLastRow();
+  if (last > 1) sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).clearContent();
+  try { SpreadsheetApp.getUi().alert('Semua sesi berhasil direset. Silakan login ulang.'); } catch(e) {}
+  Logger.log('Sessions reset OK.');
+}
+
+// ============================================================
+// SETUP & SEEDER
+// ============================================================
+
+function _autoSeedIfEmpty() {
+  try {
+    var ss    = getSpreadsheet();
+    var users = ss.getSheetByName(SHEETS.USERS);
+    if (!users || users.getLastRow() <= 1) setupAndSeed();
+  } catch (e) {
+    Logger.log('_autoSeedIfEmpty error: ' + e.message);
+  }
+}
+
+function setupAndSeed() {
+  _createSheets();
+  _seedUsers();
+  _seedDemoRencana();
+  Logger.log('Setup selesai.');
+  try {
+    SpreadsheetApp.getUi().alert(
+      'Setup Berhasil!\n\n' +
+      'Akun tersedia:\n' +
+      '- admin    / Admin@123   (GM)\n' +
+      '- scm01    / Scm@12345   (SCM)\n' +
+      '- survey01 / Survey@123  (Tim Survey)\n' +
+      '- user01   / User@1234   (Pengusul)\n' +
+      '- faris    / Faris@123   (Pengusul)'
+    );
+  } catch (e) { /* no UI from doGet */ }
+}
+
+function _createSheets() {
+  var ss = getSpreadsheet();
+  var schemas = [
+    { name: SHEETS.USERS, headers: [
+      'id','kode_user','nama_lengkap','username','password_hash','role',
+      'email','no_hp','divisi','is_active','created_at','updated_at'
+    ]},
+    { name: SHEETS.SESSIONS, headers: [
+      'token','user_id','kode_user','username','role','nama_lengkap',
+      'created_at','expires_at','is_active'
+    ]},
+    { name: SHEETS.RENCANA, headers: [
+      'id','kode_rencana','judul','deskripsi','kategori','estimasi_nilai',
+      'pengusul_id','kode_user_pengusul','nama_pengusul','divisi_pengusul',
+      'link_dokumen_fpbj','link_dokumen_final',
+      'status',
+      'gm_approval','gm_approve_at','gm_notes',
+      'survey_approval','survey_approve_at','survey_notes',
+      'fpbj_approval','fpbj_approve_at','fpbj_notes',
+      'nomer_pr_sap','tanggal_approve_budget','budget_approval',
+      'created_at','updated_at','closed_at','masuk_tender_at'
+    ]},
+    { name: SHEETS.RENCANA_STATUS, headers: [
+      'id','kode_rencana','user_id','kode_user','nama_lengkap','role',
+      'status_dokumen','catatan','view_count','first_view_at','last_view_at',
+      'total_view_duration_sec','link_dokumen','created_at','updated_at'
+    ]},
+    { name: SHEETS.TENDER, headers: [
+      'id','kode_tender','kode_rencana',
+      'scm_user_id','kode_user_scm','nama_scm',
+      'status_tahap','status_dokumen',
+      'link_dokumen_rks','link_dokumen_hps','link_dokumen_bahp',
+      'link_dokumen_skpp','link_dokumen_final_po',
+      'rks_approval','rks_approve_at','rks_notes',
+      'bahp_approval','bahp_approve_at','bahp_notes',
+      'skpp_upload_at','skpp_link',
+      'nomer_po_sap','tanggal_create_po','penanggung_jawab_po',
+      'created_at','updated_at','closed_at'
+    ]},
+    { name: SHEETS.TENDER_STATUS, headers: [
+      'id','kode_tender','kode_rencana',
+      'user_id','kode_user','nama_lengkap','role',
+      'tahap','status_dokumen','catatan','link_dokumen','created_at'
+    ]},
+    { name: SHEETS.CONTRACT, headers: [
+      'id','kode_contract','kode_tender','kode_rencana',
+      'scm_user_id','kode_user_scm','nama_scm',
+      'nama_vendor','nilai_kontrak','tanggal_mulai','tanggal_selesai',
+      'status',
+      'link_dokumen_draft','link_dokumen_review','link_dokumen_final',
+      'gm_ttd_at','vendor_ttd_at','catatan',
+      'created_at','updated_at','closed_at'
+    ]},
+    { name: SHEETS.CONTRACT_STATUS, headers: [
+      'id','kode_contract','kode_tender','kode_rencana',
+      'user_id','kode_user','nama_lengkap','role',
+      'status','catatan','link_dokumen','created_at'
+    ]},
+    { name: SHEETS.DELIVERY, headers: [
+      'id','kode_delivery','kode_contract','kode_tender','kode_rencana',
+      'kode_sagr',
+      'user_id','kode_user','nama_user',
+      'status',
+      'link_dokumen_invoice','link_dokumen_bast',
+      'tanggal_delivery','catatan','created_at','updated_at'
+    ]},
+    { name: SHEETS.DELIVERY_STATUS, headers: [
+      'id','kode_delivery','kode_contract','kode_rencana',
+      'user_id','kode_user','nama_lengkap','role',
+      'status','catatan','link_dokumen','created_at'
+    ]},
+    { name: SHEETS.AUDIT_LOG, headers: [
+      'id','timestamp','user_id','kode_user','username','role',
+      'action','payload_summary','ip_address'
+    ]}
+  ];
+
+  for (var i = 0; i < schemas.length; i++) {
+    var s     = schemas[i];
+    var sheet = ss.getSheetByName(s.name);
+    if (!sheet) sheet = ss.insertSheet(s.name);
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(s.headers);
+      sheet.getRange(1, 1, 1, s.headers.length)
+        .setBackground('#0B50A1')
+        .setFontColor('#CEDF51')
+        .setFontWeight('bold')
+        .setFontSize(11);
+      sheet.setFrozenRows(1);
+      sheet.autoResizeColumns(1, s.headers.length);
+    }
+  }
+  Logger.log('Sheets OK');
+}
+
+function _seedUsers() {
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  if (data.length > 1) { Logger.log('Users sudah ada, skip.'); return; }
+
+  var ts    = now();
+  var users = [
+    [generateId(),'GM-2026-03-0001', 'Ir. Bambang Supriyadi, M.T.','admin',
+     hashPassword('Admin@123'),  ROLES.GM,        'admin@geodipa.co.id',   '08111234567','General Management',     true,ts,ts],
+    [generateId(),'SCM-2026-03-0001','Dian Kusuma Wardani',         'scm01',
+     hashPassword('Scm@12345'),  ROLES.SCM,       'scm01@geodipa.co.id',   '08122345678','Supply Chain Mgmt',      true,ts,ts],
+    [generateId(),'SCM-2026-03-0002','Reza Firmansyah',             'scm02',
+     hashPassword('Scm@12345'),  ROLES.SCM,       'scm02@geodipa.co.id',   '08133456789','Supply Chain Mgmt',      true,ts,ts],
+    [generateId(),'SRV-2026-03-0001','Agus Salim Hidayat',          'survey01',
+     hashPassword('Survey@123'), ROLES.TIM_SURVEY,'survey01@geodipa.co.id','08144567890','Market Survey',          true,ts,ts],
+    [generateId(),'USR-2026-03-0001','Hendra Wijaya',               'user01',
+     hashPassword('User@1234'),  ROLES.USER,      'user01@geodipa.co.id',  '08166789012','Operasi & Pemeliharaan', true,ts,ts],
+    [generateId(),'USR-2026-03-0002','Rina Pratiwi Susanto',        'user02',
+     hashPassword('User@1234'),  ROLES.USER,      'user02@geodipa.co.id',  '08177890123','Engineering',            true,ts,ts],
+    [generateId(),'USR-2026-03-0003','Faris Pradipta',              'faris',
+     hashPassword('Faris@123'),  ROLES.USER,      'faris@geodipa.co.id',   '08188901234','IT & Digitalisasi',      true,ts,ts]
+  ];
+
+  for (var i = 0; i < users.length; i++) sheet.appendRow(users[i]);
+  Logger.log(users.length + ' users seeded.');
+}
+
+function _seedDemoRencana() {
+  var rSheet = getSheet(SHEETS.RENCANA);
+  var data   = rSheet.getDataRange().getValues();
+  if (data.length > 1) { Logger.log('Rencana sudah ada, skip.'); return; }
+
+  var rencanas = [
+    [generateId(),'RNC-2026-03-0001','Pengadaan Peralatan Safety K3 & APD',
+     'Pengadaan APD untuk area produksi Unit Patuha tahun 2026.',
+     'Barang',125000000,'seed-uid1','USR-2026-03-0001','Hendra Wijaya','Operasi & Pemeliharaan',
+     '','','APPROVED',
+     'APPROVED','2026-03-10 09:00:00','Dokumen lengkap.',
+     'APPROVED','2026-03-09 14:00:00','Harga sesuai pasaran.',
+     '','','',
+     'PR-2026-001','2026-03-12','APPROVED',
+     '2026-03-05 08:00:00','2026-03-12 10:00:00','','2026-03-12 10:00:00'],
+
+    [generateId(),'RNC-2026-03-0002','Jasa Konsultansi Geothermal Well Testing',
+     'Jasa konsultan well testing sumur DP-6.',
+     'Jasa',450000000,'seed-uid2','USR-2026-03-0002','Rina Pratiwi Susanto','Engineering',
+     'https://drive.google.com/x','','PENDING',
+     'PENDING','','','PEER_REVIEWED','2026-03-15 10:30:00','',
+     '','','',
+     '','','',
+     '2026-03-14 13:00:00','2026-03-15 10:30:00','',''],
+
+    [generateId(),'RNC-2026-03-0003','Pengadaan Pipa Carbon Steel 6 Inch',
+     'Pipa pengganti jalur steam DP-6.',
+     'Barang',280000000,'seed-uid1','USR-2026-03-0001','Hendra Wijaya','Operasi & Pemeliharaan',
+     'https://drive.google.com/x','','REVISED',
+     'REVISED','2026-03-08 11:00:00','Estimasi terlalu tinggi, cek 3 referensi harga.',
+     'REVIEWED','2026-03-07 15:00:00','',
+     '','','',
+     '','','',
+     '2026-03-06 09:00:00','2026-03-08 11:00:00','',''],
+
+    [generateId(),'RNC-2026-03-0004','Pengadaan Genset Backup 500 KVA',
+     'Generator backup control room.',
+     'Barang',850000000,'seed-uid2','USR-2026-03-0002','Rina Pratiwi Susanto','Engineering',
+     '','','DRAFT',
+     '','','','','','',
+     '','','',
+     '','','',
+     '2026-03-16 07:30:00','2026-03-16 07:30:00','','']
+  ];
+
+  for (var i = 0; i < rencanas.length; i++) rSheet.appendRow(rencanas[i]);
+
+  // Status logs
+  var sSheet = getSheet(SHEETS.RENCANA_STATUS);
+  if (sSheet.getLastRow() <= 1) {
+    var logs = [
+      [generateId(),'RNC-2026-03-0001','seed-uid1','USR-2026-03-0001','Hendra Wijaya','USER',
+       'PENDING','Disubmit pengusul.',0,'','',0,'','2026-03-05 08:00:00','2026-03-05 08:00:00'],
+      [generateId(),'RNC-2026-03-0001','seed-srv1','SRV-2026-03-0001','Agus Salim Hidayat','TIM_SURVEY',
+       'APPROVED','Harga sesuai pasaran.',3,'2026-03-08 09:00:00','2026-03-09 14:00:00',680,'','2026-03-09 14:00:00','2026-03-09 14:00:00'],
+      [generateId(),'RNC-2026-03-0001','seed-gm1','GM-2026-03-0001','Ir. Bambang Supriyadi','GM',
+       'APPROVED','Disetujui.',2,'2026-03-09 16:00:00','2026-03-10 09:00:00',420,'','2026-03-10 09:00:00','2026-03-10 09:00:00'],
+      [generateId(),'RNC-2026-03-0002','seed-uid2','USR-2026-03-0002','Rina Pratiwi Susanto','USER',
+       'PENDING','Disubmit pengusul.',0,'','',0,'','2026-03-14 13:00:00','2026-03-14 13:00:00']
+    ];
+    for (var j = 0; j < logs.length; j++) sSheet.appendRow(logs[j]);
+  }
+
+  Logger.log(rencanas.length + ' rencana seeded.');
+}

@@ -1,0 +1,175 @@
+/**
+ * auth.gs - Authentication & User Management
+ */
+
+function _handleLogin(payload) {
+  var username = payload.username;
+  var password = payload.password;
+  if (!username || !password) {
+    return { success: false, message: 'Username dan password wajib diisi.' };
+  }
+  var sheet   = getSheet(SHEETS.USERS);
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var H       = arrayToIndex(headers);
+  var rows    = data.slice(1);
+  var userRow = null;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][H.username] === username.trim() && rows[i][H.is_active] === true) {
+      userRow = rows[i]; break;
+    }
+  }
+  if (!userRow) return { success: false, message: 'Username tidak ditemukan atau akun tidak aktif.' };
+  if (!verifyPassword(password, userRow[H.password_hash])) {
+    return { success: false, message: 'Password salah.' };
+  }
+  var token     = generateToken();
+  var expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000);
+  var sessSheet = getSheet(SHEETS.SESSIONS);
+  sessSheet.appendRow([
+    token, userRow[H.id], userRow[H.kode_user], userRow[H.username],
+    userRow[H.role], userRow[H.nama_lengkap],
+    now(), expiresAt.toISOString(), true
+  ]);
+  return {
+    success: true,
+    message: 'Selamat datang, ' + userRow[H.nama_lengkap] + '!',
+    token: token,
+    user: {
+      id: userRow[H.id], kode_user: userRow[H.kode_user],
+      nama_lengkap: userRow[H.nama_lengkap], username: userRow[H.username],
+      role: userRow[H.role], divisi: userRow[H.divisi] || '', email: userRow[H.email] || ''
+    }
+  };
+}
+
+function _handleLogout(token) {
+  if (!token) return { success: true };
+  var sheet = getSheet(SHEETS.SESSIONS);
+  var data  = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === token) { sheet.getRange(i + 1, 9).setValue(false); break; }
+  }
+  return { success: true, message: 'Berhasil logout.' };
+}
+
+function verifySession(token) {
+  if (!token) return null;
+  var sheet = getSheet(SHEETS.SESSIONS);
+  var data  = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (row[0] !== token) continue;
+    if (!row[8] || new Date() > new Date(row[7])) return null;
+    return { user_id: row[1], kode_user: row[2], username: row[3],
+             role: row[4], nama_lengkap: row[5], token: token };
+  }
+  return null;
+}
+
+function changePassword(session, payload) {
+  if (!payload.old_password || !payload.new_password) {
+    return { success: false, message: 'Password lama dan baru wajib.' };
+  }
+  if (payload.new_password.length < 8) {
+    return { success: false, message: 'Password baru minimal 8 karakter.' };
+  }
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === session.user_id) {
+      if (!verifyPassword(payload.old_password, data[i][H.password_hash])) {
+        return { success: false, message: 'Password lama salah.' };
+      }
+      sheet.getRange(i+1, H.password_hash+1).setValue(hashPassword(payload.new_password));
+      sheet.getRange(i+1, H.updated_at+1).setValue(now());
+      return { success: true, message: 'Password berhasil diubah.' };
+    }
+  }
+  return { success: false, message: 'User tidak ditemukan.' };
+}
+
+function getUsers(session) {
+  requireRole(session, [ROLES.GM]);
+  var objects = sheetToObjects(SHEETS.USERS);
+  var result  = [];
+  for (var i = 0; i < objects.length; i++) {
+    var u = objects[i];
+    result.push({ id: u.id, kode_user: u.kode_user, nama_lengkap: u.nama_lengkap,
+      username: u.username, role: u.role, email: u.email, no_hp: u.no_hp,
+      divisi: u.divisi, is_active: u.is_active, created_at: u.created_at });
+  }
+  return { success: true, data: result };
+}
+
+function createUser(session, payload) {
+  requireRole(session, [ROLES.GM]);
+  var validRoles = [ROLES.USER, ROLES.TIM_SURVEY, ROLES.SCM, ROLES.GM];
+  if (!payload.nama_lengkap || !payload.username || !payload.password || !payload.role) {
+    return { success: false, message: 'nama_lengkap, username, password, role wajib.' };
+  }
+  if (validRoles.indexOf(payload.role) === -1) {
+    return { success: false, message: 'Role tidak valid.' };
+  }
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.username] === payload.username) {
+      return { success: false, message: 'Username sudah digunakan.' };
+    }
+  }
+  var prefixMap = { USER: 'USR', TIM_SURVEY: 'SRV', SCM: 'SCM', GM: 'GM' };
+  var kode = generateKode(prefixMap[payload.role] || 'USR', SHEETS.USERS, 'kode_user');
+  var id   = generateId();
+  sheet.appendRow([
+    id, kode, payload.nama_lengkap, payload.username,
+    hashPassword(payload.password), payload.role,
+    payload.email || '', payload.no_hp || '', payload.divisi || '',
+    true, now(), now()
+  ]);
+  return { success: true, message: 'User berhasil dibuat.', kode_user: kode };
+}
+
+function updateUser(session, payload) {
+  requireRole(session, [ROLES.GM]);
+  if (!payload.id) return { success: false, message: 'id wajib.' };
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === payload.id) {
+      if (payload.nama_lengkap !== undefined) sheet.getRange(i+1,H.nama_lengkap+1).setValue(payload.nama_lengkap);
+      if (payload.role !== undefined)         sheet.getRange(i+1,H.role+1).setValue(payload.role);
+      if (payload.email !== undefined)        sheet.getRange(i+1,H.email+1).setValue(payload.email);
+      if (payload.no_hp !== undefined)        sheet.getRange(i+1,H.no_hp+1).setValue(payload.no_hp);
+      if (payload.divisi !== undefined)       sheet.getRange(i+1,H.divisi+1).setValue(payload.divisi);
+      if (payload.is_active !== undefined)    sheet.getRange(i+1,H.is_active+1).setValue(payload.is_active);
+      sheet.getRange(i+1, H.updated_at+1).setValue(now());
+      return { success: true, message: 'User diupdate.' };
+    }
+  }
+  return { success: false, message: 'User tidak ditemukan.' };
+}
+
+function deleteUser(session, payload) {
+  requireRole(session, [ROLES.GM]);
+  payload.is_active = false;
+  return updateUser(session, payload);
+}
+
+function hashPassword(plain) {
+  var salt  = 'GEODIPA_SLIP_ROUTING_2026';
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256, plain + salt, Utilities.Charset.UTF_8);
+  return bytes.map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+}
+
+function verifyPassword(plain, hash) { return hashPassword(plain) === hash; }
+
+function requireRole(session, allowedRoles) {
+  if (allowedRoles.indexOf(session.role) === -1) {
+    throw new Error('Akses ditolak. Role ' + session.role + ' tidak diizinkan.');
+  }
+}

@@ -1,0 +1,197 @@
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+:root {
+  --geo-blue:#0B50A1; --geo-blue-lt:#3b79cc; --geo-blue-dk:#083d7c;
+  --geo-red:#CD142C; --geo-lime:#CEDF51; --geo-green:#8DC63F;
+  --bg-page:#f4f7fc; --bg-card:#ffffff; --border:#e8edf5;
+  --text-primary:#0f1d35; --text-muted:#7a8899;
+}
+/* BI icon sizing */
+.bi { font-size: 18px; line-height: 1; vertical-align: -0.15em; }
+.bi-sm { font-size: 14px; }
+.bi-lg { font-size: 22px; }
+.bi-xl { font-size: 28px; }
+.stat-icon .bi { font-size: 22px; }
+.empty-icon .bi { font-size: 36px; }
+.btn .bi { font-size: 15px; }
+.btn-sm .bi { font-size: 13px; }
+.modal-title .bi { font-size: 18px; }
+/* Layout */
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px;}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.card-title{font-size:14px;font-weight:700;color:var(--text-primary);}
+.card-sub{font-size:11.5px;color:var(--text-muted);margin-top:2px;}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:600;font-family:"DM Sans",sans-serif;cursor:pointer;border:none;transition:all 0.15s;text-decoration:none;white-space:nowrap;}
+.btn-primary{background:var(--geo-blue);color:white;} .btn-primary:hover{background:var(--geo-blue-lt);}
+.btn-outline{background:white;color:var(--text-primary);border:1px solid var(--border);} .btn-outline:hover{background:var(--bg-page);}
+.btn-danger{background:var(--geo-red);color:white;} .btn-success{background:var(--geo-green);color:white;}
+.btn-warning{background:#f59e0b;color:white;}
+.btn-sm{padding:6px 13px;font-size:12px;border-radius:7px;}
+.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;}
+.badge-draft{background:#f4f7fc;color:#7a8899;} .badge-draft::before{background:#b0bac9;}
+.badge-pending{background:#fffbf0;color:#c07a00;border:1px solid #ffe4a0;} .badge-pending::before{background:#f0a000;}
+.badge-peer_reviewed{background:#f0f4ff;color:var(--geo-blue);border:1px solid #c5d9f5;} .badge-peer_reviewed::before{background:var(--geo-blue);}
+.badge-reviewed{background:#EFF5FF;color:var(--geo-blue-dk);} .badge-reviewed::before{background:var(--geo-blue-lt);}
+.badge-approved{background:#f0faf0;color:#2d7a2d;border:1px solid #c6efce;} .badge-approved::before{background:var(--geo-green);}
+.badge-revised{background:#fff8f0;color:#c05000;border:1px solid #ffd0a0;} .badge-revised::before{background:#e07000;}
+.badge-rejected{background:#fff0f0;color:var(--geo-red);border:1px solid #ffd0d4;} .badge-rejected::before{background:var(--geo-red);}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;gap:16px;flex-wrap:wrap;}
+.page-title{font-family:"DM Serif Display",Georgia,serif;font-size:24px;color:var(--text-primary);}
+.page-subtitle{font-size:13px;color:var(--text-muted);margin-top:3px;}
+.page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;transition:box-shadow 0.15s,transform 0.15s;}
+.stat-card:hover{box-shadow:0 4px 20px rgba(11,80,161,.08);transform:translateY(-1px);}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:14px 14px 0 0;}
+.stat-card.blue::before{background:var(--geo-blue);} .stat-card.red::before{background:var(--geo-red);}
+.stat-card.green::before{background:var(--geo-green);} .stat-card.lime::before{background:var(--geo-lime);}
+.stat-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
+.stat-icon.blue{background:#EFF5FF;color:var(--geo-blue);} .stat-icon.red{background:#FFF0F0;color:var(--geo-red);}
+.stat-icon.green{background:#F0FAF0;color:var(--geo-green);} .stat-icon.lime{background:#FAFAED;color:#7a8b00;}
+.stat-value{font-family:"DM Serif Display",Georgia,serif;font-size:30px;color:var(--text-primary);line-height:1;margin-bottom:4px;}
+.stat-label{font-size:12px;color:var(--text-muted);font-weight:500;}
+.data-table-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--border);}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table thead th{background:#f8fafd;padding:11px 14px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);border-bottom:1px solid var(--border);white-space:nowrap;}
+.data-table tbody tr{border-bottom:1px solid #f0f4fa;transition:background 0.1s;}
+.data-table tbody tr:hover{background:#fafcff;}
+.data-table td{padding:12px 14px;vertical-align:middle;}
+.table-code{font-family:monospace;font-size:11.5px;background:#f0f4fa;padding:3px 8px;border-radius:5px;color:var(--geo-blue-dk);font-weight:600;}
+.table-title{font-weight:600;color:var(--text-primary);font-size:13px;}
+.table-sub{font-size:11.5px;color:var(--text-muted);margin-top:1px;}
+.table-action{display:flex;gap:5px;align-items:center;}
+.form-group{margin-bottom:16px;}
+.form-label{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#4a5568;margin-bottom:6px;}
+.form-input{width:100%;height:42px;border:1.5px solid var(--border);border-radius:9px;padding:0 13px;font-size:13.5px;color:var(--text-primary);font-family:"DM Sans",sans-serif;outline:none;transition:all .15s;background:#fafbfd;}
+.form-input:focus{border-color:var(--geo-blue);background:white;box-shadow:0 0 0 3px rgba(11,80,161,.07);}
+.form-textarea{width:100%;min-height:90px;border:1.5px solid var(--border);border-radius:9px;padding:10px 13px;font-size:13.5px;color:var(--text-primary);font-family:"DM Sans",sans-serif;outline:none;transition:all .15s;background:#fafbfd;resize:vertical;}
+.form-textarea:focus{border-color:var(--geo-blue);background:white;}
+.form-select{width:100%;height:42px;border:1.5px solid var(--border);border-radius:9px;padding:0 13px;font-size:13.5px;font-family:"DM Sans",sans-serif;outline:none;background:#fafbfd;}
+.form-select:focus{border-color:var(--geo-blue);}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 24px;text-align:center;}
+.empty-icon{width:72px;height:72px;border-radius:18px;background:#f0f4fa;display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:#b0bac9;}
+.empty-title{font-size:15px;font-weight:700;color:var(--text-primary);}
+.empty-desc{font-size:13px;color:var(--text-muted);margin-top:4px;margin-bottom:20px;}
+.modal-overlay{position:fixed;inset:0;background:rgba(15,29,53,.45);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal-box{background:white;border-radius:18px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(11,80,161,.18);}
+.modal-header{padding:20px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:16px;font-weight:700;color:var(--text-primary);}
+.modal-close{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text-muted);display:flex;align-items:center;justify-content:center;transition:all 0.12s;}
+.modal-close:hover{background:#f4f7fc;color:var(--text-primary);}
+.modal-body{padding:20px 22px;}
+.modal-footer{padding:14px 22px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+.flow-timeline{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:4px 0 12px;}
+.flow-step{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:100px;position:relative;}
+.flow-step:not(:last-child)::after{content:'';position:absolute;top:14px;left:50%;width:100%;height:2px;background:#e0e8f5;}
+.flow-step.done::after{background:var(--geo-green);} .flow-step.active::after{background:var(--geo-lime);}
+.flow-dot{width:28px;height:28px;border-radius:50%;border:2px solid #d0dce8;background:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text-muted);z-index:1;position:relative;}
+.flow-step.done .flow-dot{border-color:var(--geo-green);background:var(--geo-green);color:white;}
+.flow-step.active .flow-dot{border-color:var(--geo-blue);background:var(--geo-blue);color:white;box-shadow:0 0 0 4px rgba(11,80,161,.15);}
+.flow-label{font-size:10px;font-weight:600;color:var(--text-muted);text-align:center;max-width:90px;}
+.flow-step.active .flow-label{color:var(--geo-blue);} .flow-step.done .flow-label{color:var(--geo-green);}
+.alert-box{padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+.alert-box.success{background:#f0faf0;border:1px solid #c6efce;color:#2d7a2d;}
+.alert-box.error{background:#fff0f0;border:1px solid #ffd0d4;color:var(--geo-red);}
+.alert-box.info{background:#EFF5FF;border:1px solid #c5d9f5;color:var(--geo-blue);}
+.progress-step{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #f4f7fc;}
+.progress-step:last-child{border-bottom:none;}
+.progress-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
+.progress-dot.done{background:var(--geo-green);color:white;}
+.progress-dot.active{background:var(--geo-blue);color:white;}
+.progress-dot.pending{background:#e8edf5;color:#7a8899;}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;}
+.tag-blue{background:#f0f6ff;color:var(--geo-blue);}
+.tag-orange{background:#fff8f0;color:#c05000;}
+.tag-green{background:#f0faf0;color:#2d7a2d;}
+.upload-zone{border:2px dashed #d0dce8;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;}
+.upload-zone:hover{border-color:var(--geo-blue);background:#f8fbff;}
+.upload-zone .bi{font-size:32px;color:#b0bac9;display:block;margin-bottom:10px;}
+</style>
+<div class="page-header">
+  <div><h1 class="page-title">Approval Rencana</h1><p class="page-subtitle" id="apCount">Memuat antrian...</p></div>
+</div>
+<div class="card">
+  <div class="card-header"><div class="card-title"><i class="bi bi-list-check" style="color:var(--geo-blue)"></i> Rencana Menunggu Review Anda</div></div>
+  <div id="apTable"><div class="empty-state"><div class="empty-icon"><i class="bi bi-hourglass bi-xl"></i></div><div class="empty-title">Memuat data...</div></div></div>
+</div>
+<div id="modalContainer"></div>
+
+<script>
+function badgeHtml(status) {
+  var s = (status || 'DRAFT').toLowerCase().replace(/[^a-z_]/g, '');
+  var labels = {'draft':'Draft','pending':'Menunggu','peer_reviewed':'Dilihat','reviewed':'Dibaca','approved':'Disetujui','revised':'Revisi','rejected':'Ditolak'};
+  return '<span class="badge badge-' + s + '">' + (labels[s] || status) + '</span>';
+}
+function fmtDate(d) {
+  if (!d) return '-';
+  return new Date(d).toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'numeric'});
+}
+function fmtRupiah(n) {
+  return 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+}
+function openModal(html) {
+  document.getElementById('modalContainer').innerHTML = html;
+}
+function closeModal() {
+  document.getElementById('modalContainer').innerHTML = '';
+}
+function showViewToast(msg, type) {
+  if (window.showToast) window.showToast(msg, type || 'info');
+}
+</script>
+<script>
+(function() {
+  var user = window.APP && window.APP.user;
+  var role = user ? user.role : '';
+  api('getRencanaList', {page:1,limit:50}).then(function(res) {
+    if (!res.success) return;
+    var items = res.data.filter(function(r) {
+      if (role==='GM')         return !r.gm_approval || r.gm_approval==='' || r.gm_approval==='PENDING';
+      if (role==='TIM_SURVEY') return !r.survey_approval || r.survey_approval==='' || r.survey_approval==='PENDING';
+      return false;
+    });
+    document.getElementById('apCount').textContent = items.length + ' rencana menunggu review Anda';
+    if (!items.length) {
+      document.getElementById('apTable').innerHTML = '<div class="empty-state"><div class="empty-icon"><i class="bi bi-check-circle bi-xl" style="color:var(--geo-green)"></i></div><div class="empty-title">Tidak ada yang perlu di-review</div><div class="empty-desc">Semua rencana sudah diproses</div></div>';
+      return;
+    }
+    var rows = '';
+    for (var i=0; i<items.length; i++) {
+      var r = items[i];
+      var myStatus = role==='GM' ? (r.gm_approval||'PENDING') : (r.survey_approval||'PENDING');
+      var docBtn   = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i> Dok</a>' : '';
+      rows += '<tr>' +
+        '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
+        '<td><div class="table-title">' + r.judul + '</div><div class="table-sub">' + (r.kategori||'') + ' &middot; ' + fmtRupiah(r.estimasi_nilai) + '</div></td>' +
+        '<td>' + (r.nama_pengusul||'-') + '</td>' +
+        '<td>' + badgeHtml(myStatus) + '</td>' +
+        '<td style="font-size:11px;color:var(--text-muted)">' + fmtDate(r.created_at) + '</td>' +
+        '<td><div class="table-action">' + docBtn +
+          '<button class="btn btn-sm btn-primary" onclick=\"openAp(\'\" + r.kode_rencana + \"\',\'\" + (r.judul||'').replace(/'/g,'') + \"\')"><i class="bi bi-check2-circle"></i> Review</button>' +
+        '</div></td>' +
+      '</tr>';
+    }
+    document.getElementById('apTable').innerHTML = '<div class="data-table-wrap"><table class="data-table"><thead><tr>' +
+      '<th>Kode</th><th>Judul</th><th>Pengusul</th><th>Status Saya</th><th>Tanggal</th><th>Aksi</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  });
+})();
+function openAp(kode, judul) {
+  openModal('<div class="modal-overlay" onclick="closeModal()"><div class="modal-box" onclick="event.stopPropagation()">' +
+    '<div class="modal-header"><div class="modal-title"><i class="bi bi-check2-circle"></i> Review Rencana</div><button class="modal-close" onclick="closeModal()"><i class="bi bi-x-lg"></i></button></div>' +
+    '<div class="modal-body">' +
+    '<div class="alert-box info"><i class="bi bi-file-earmark-text"></i> <strong>' + kode + '</strong> &mdash; ' + judul + '</div>' +
+    '<div class="form-group"><label class="form-label">Keputusan *</label><select class="form-select" id="apAction">' +
+    '<option value="approve">Setujui</option><option value="revise">Minta Revisi</option><option value="reject">Tolak</option></select></div>' +
+    '<div class="form-group"><label class="form-label">Catatan</label><textarea class="form-textarea" id="apNote" placeholder="Tulis alasan atau catatan..."></textarea></div>' +
+    '</div><div class="modal-footer">' +
+    '<button class="btn btn-outline" onclick="closeModal()"><i class="bi bi-x"></i> Batal</button>' +
+    '<button class="btn btn-primary" onclick=\"submitAp(\'\" + kode + \"\')"><i class="bi bi-send"></i> Kirim</button>' +
+    '</div></div></div>');
+}
+function submitAp(kode) {
+  api('approveRencana', {kode_rencana:kode, action:document.getElementById('apAction').value, catatan:document.getElementById('apNote').value})
+    .then(function(res) { closeModal(); showViewToast(res.message, res.success?'success':'error'); if(res.success) loadView('approval-rencana'); });
+}
+</script>

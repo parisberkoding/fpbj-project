@@ -1,0 +1,230 @@
+/**
+ * ============================================================
+ * delivery.gs - Delivery Monitoring
+ * ============================================================
+ * Tahapan:
+ * 1. SA/GR (Service Acceptance / Goods Receipt) - SCM input
+ * 2. Invoice upload - SCM / User upload
+ * 3. Verifikasi
+ * 4. Selesai
+ * ============================================================
+ */
+
+var DELIVERY_TAHAP = {
+  SA_GR:       'SA_GR',
+  INVOICE:     'INVOICE',
+  VERIFIKASI:  'VERIFIKASI',
+  SELESAI:     'SELESAI',
+};
+
+// https://drive.google.com/drive/folders/18dsFRfKNbmKC0TcV05xmzaXmKRYSX7D8?hl=ID
+var DRIVE_FOLDER_DELIVERY = '18dsFRfKNbmKC0TcV05xmzaXmKRYSX7D8';
+
+// -- Create Delivery -------------------------------------------
+function createDelivery(session, payload) {
+  if (session.role !== ROLES.SCM && session.role !== ROLES.USER) {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+  if (!payload.kode_contract) return { success: false, message: 'kode_contract wajib.' };
+
+  var kode_contract = payload.kode_contract;
+var kode_sagr = payload.kode_sagr;
+var tanggal_delivery = payload.tanggal_delivery;
+var catatan = payload.catatan;
+
+  var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
+  if (!contract) return { success: false, message: 'Kontrak tidak ditemukan.' };
+
+  var kode = generateKodeDelivery();
+  var id   = generateId();
+
+  var sheet = getSheet(SHEETS.DELIVERY);
+  sheet.appendRow([
+    id,                           // col1: id
+    kode,                         // col2: kode_delivery
+    kode_contract,                // col3: kode_contract
+    contract.kode_tender,         // col4: kode_tender
+    contract.kode_rencana,        // col5: kode_rencana
+    kode_sagr || '',              // col6: kode_sagr
+    session.user_id,              // col7: user_id
+    session.kode_user,            // col8: kode_user
+    session.nama_lengkap,         // col9: nama_user
+    DELIVERY_TAHAP.SA_GR,         // col10: status
+    '', '',                       // col11-12: link_dokumen_invoice, link_dokumen_bast
+    tanggal_delivery || nowDate(), // col13: tanggal_delivery
+    catatan || '',                // col14: catatan
+    now(), now()                  // col15-16: created_at, updated_at
+  ]);
+
+  _addDeliveryStatusLog(kode, kode_contract, contract.kode_rencana, session, DELIVERY_TAHAP.SA_GR, 'Delivery dibuat.', '');
+
+  return {
+    success: true,
+    message: 'Delivery monitoring berhasil dibuat. Kode: ' + kode,
+    kode_delivery: kode,
+    id: id
+  };
+}
+
+// -- Update Delivery Status ------------------------------------
+function updateDeliveryStatus(session, payload) {
+  if (session.role !== ROLES.SCM && session.role !== ROLES.USER && session.role !== ROLES.GM) {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+
+  var kode_delivery = payload.kode_delivery;
+var new_status = payload.new_status;
+var catatan = payload.catatan;
+var kode_sagr = payload.kode_sagr;
+  if (!payload.kode_delivery || !payload.new_status) return { success: false, message: 'kode_delivery dan new_status wajib.' };
+
+  if (!Object.keys(DELIVERY_TAHAP).some(function(k) { return DELIVERY_TAHAP[k] === new_status; })) {
+    return { success: false, message: 'Status tidak valid.' };
+  }
+
+  var delivery = getRowByField(SHEETS.DELIVERY, 'kode_delivery', kode_delivery);
+  if (!delivery) return { success: false, message: 'Delivery tidak ditemukan.' };
+
+  var updates = { status: new_status };
+  if (catatan)   updates.catatan  = catatan;
+  if (kode_sagr) updates.kode_sagr = kode_sagr;
+  if (new_status === DELIVERY_TAHAP.SELESAI) updates.updated_at = now();
+
+  updateRowById(SHEETS.DELIVERY, delivery.id, updates);
+  _addDeliveryStatusLog(kode_delivery, delivery.kode_contract, delivery.kode_rencana, session, new_status, catatan || '', '');
+
+  return { success: true, message: 'Status delivery diupdate ke: ' + new_status };
+}
+
+// -- Upload Dokumen Delivery -----------------------------------
+function uploadDokumenDelivery(session, payload) {
+  if (session.role !== ROLES.SCM && session.role !== ROLES.USER) {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+
+  var kode_delivery = payload.kode_delivery;
+var file_base64 = payload.file_base64;
+var file_name = payload.file_name;
+var mime_type = payload.mime_type;
+var doc_type = payload.doc_type;
+  if (!payload.kode_delivery || !payload.file_base64 || !payload.file_name || !payload.mime_type || !payload.doc_type) {
+    return { success: false, message: 'Field wajib tidak lengkap.' };
+  }
+
+  var delivery = getRowByField(SHEETS.DELIVERY, 'kode_delivery', kode_delivery);
+  if (!delivery) return { success: false, message: 'Delivery tidak ditemukan.' };
+
+  var subfolder = getOrCreateFolder(DRIVE_FOLDER_DELIVERY, kode_delivery);
+  var link      = uploadFileToDrive(file_base64, mime_type, file_name, subfolder.getId());
+
+  var colMap = {
+    'invoice': 'link_dokumen_invoice',
+    'bast':    'link_dokumen_bast',
+  };
+
+  var col = colMap[doc_type];
+  if (!col) return { success: false, message: 'doc_type tidak valid. Pilih: invoice/bast' };
+
+  var updates = {};
+  updates[col] = link;
+
+  if (doc_type === 'invoice') {
+    updates.status = DELIVERY_TAHAP.INVOICE;
+  }
+
+  updateRowById(SHEETS.DELIVERY, delivery.id, updates);
+  _addDeliveryStatusLog(kode_delivery, delivery.kode_contract, delivery.kode_rencana, session, updates.status || delivery.status, 'Dokumen ' + doc_type + ' diupload.', link);
+
+  return { success: true, message: 'Dokumen ' + doc_type + ' berhasil diupload.', link: link };
+}
+
+// -- Get Delivery List -----------------------------------------
+function getDeliveryList(session, payload) {
+  var all   = sheetToObjects(SHEETS.DELIVERY);
+  var role  = session.role;
+  var page  = parseInt(payload.page  || 1);
+  var limit = parseInt(payload.limit || 20);
+
+  var data = all;
+
+  if (role === ROLES.SCM) {
+    data = data.filter(function(r) { return r.kode_user === session.kode_user; });
+  }
+
+  if (role === ROLES.USER) {
+    var myRencana = sheetToObjects(SHEETS.RENCANA)
+      .filter(function(r) { return r.kode_user_pengusul === session.kode_user; })
+      .map(function(r) { return r.kode_rencana; });
+    data = data.filter(function(r) { return myRencana.indexOf(r.kode_rencana) !== -1; });
+  }
+
+  var filter = payload.filter || {};
+  if (filter.status) data = data.filter(function(r) { return r.status === filter.status; });
+  if (filter.search) {
+    var q = filter.search.toLowerCase();
+    data = data.filter(function(r) {
+      return r.kode_delivery.toLowerCase().indexOf(q) !== -1 ||
+             (r.kode_sagr || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  data.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
+
+  var total = data.length;
+  var items = data.slice((page - 1) * limit, page * limit);
+
+  return {
+    success: true,
+    data: items,
+    pagination: { page: page, limit: limit, total: total, totalPage: Math.ceil(total / limit) }
+  };
+}
+
+// -- Get Full Tracing (by kode_rencana) ------------------------
+/**
+ * Endpoint khusus untuk melacak seluruh perjalanan satu kode rencana
+ * dari Rencana -> Tender -> Contract -> Delivery
+ */
+function getFullTrace(session, payload) {
+  var kode_rencana = payload.kode_rencana;
+  if (!kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
+
+  var rencana  = getRowByField(SHEETS.RENCANA, 'kode_rencana', kode_rencana);
+  var tender   = getRowByField(SHEETS.TENDER,   'kode_rencana', kode_rencana);
+  var contract = tender ? getRowByField(SHEETS.CONTRACT, 'kode_tender', tender.kode_tender) : null;
+  var delivery = contract ? sheetToObjects(SHEETS.DELIVERY).filter(function(d) { return d.kode_contract === contract.kode_contract; }) : [];
+
+  var rencanaLogs  = sheetToObjects(SHEETS.RENCANA_STATUS).filter(function(s) { return s.kode_rencana === kode_rencana; });
+  var tenderLogs   = tender   ? sheetToObjects(SHEETS.TENDER_STATUS).filter(function(s) { return s.kode_tender === tender.kode_tender; }) : [];
+  var contractLogs = contract ? sheetToObjects(SHEETS.CONTRACT_STATUS).filter(function(s) { return s.kode_contract === contract.kode_contract; }) : [];
+
+  return {
+    success: true,
+    kode_rencana: kode_rencana,
+    trace: {
+      rencana:  { data: rencana,  logs: rencanaLogs },
+      tender:   { data: tender,   logs: tenderLogs },
+      contract: { data: contract, logs: contractLogs },
+      delivery: { data: delivery },
+    }
+  };
+}
+
+// -- Internal Status Log ---------------------------------------
+function _addDeliveryStatusLog(kode_delivery, kode_contract, kode_rencana, session, status, catatan, link) {
+  var sheet = getSheet(SHEETS.DELIVERY_STATUS);
+  sheet.appendRow([
+    generateId(),
+    kode_delivery,
+    kode_contract,
+    kode_rencana,
+    session.user_id,
+    session.kode_user,
+    session.nama_lengkap,
+    session.role,
+    status,
+    catatan || '',
+    link || '',
+    now()
+  ]);
+}

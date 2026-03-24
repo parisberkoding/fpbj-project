@@ -1,0 +1,636 @@
+<!--
+  ============================================================
+  navbar.html — Top Navigation Bar Partial
+  PT. Geo Dipa Energi — Slip Routing System
+
+  Usage in GAS (di dalam maincontent.html):
+    <?!= include('navbar') ?>
+
+  initNavbar(userSession) dipanggil dari maincontent.html
+  setelah template di-render dan DOM siap.
+  ============================================================
+-->
+<header id="navbar" class="navbar-wrapper">
+
+  <!-- Left: Mobile hamburger + breadcrumb -->
+  <div class="navbar-left">
+    <button class="btn-mobile-menu" id="mobileMenuBtn" onclick="toggleMobileSidebar()">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="navbar-breadcrumb">
+      <span class="breadcrumb-root">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style="margin-right:4px; opacity:0.5">
+          <rect x="0.5" y="0.5" width="5" height="5" rx="1" fill="currentColor"/>
+          <rect x="7.5" y="0.5" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/>
+          <rect x="0.5" y="7.5" width="5" height="5" rx="1" fill="currentColor" opacity="0.5"/>
+          <rect x="7.5" y="7.5" width="5" height="5" rx="1" fill="currentColor"/>
+        </svg>
+        Slip Routing
+      </span>
+      <span class="breadcrumb-sep">›</span>
+      <span class="breadcrumb-current" id="navPageTitle">Dashboard</span>
+    </div>
+  </div>
+
+  <!-- Right: Search + Notif + Profile -->
+  <div class="navbar-right">
+
+    <!-- Search -->
+    <div class="navbar-search">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" class="search-icon">
+        <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M9.5 9.5L12 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+      <input type="text" class="search-input" placeholder="Cari rencana, tender, kode..." id="globalSearch" oninput="onGlobalSearch(this.value)">
+      <kbd class="search-shortcut">⌘K</kbd>
+    </div>
+
+    <!-- Notification Bell -->
+    <div class="navbar-notif">
+      <button class="btn-notif" onclick="toggleNotifPanel()" id="notifBtn">
+        <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
+          <path d="M8.5 1.5C6 1.5 4 3.5 4 6v3.5L2 12h13l-2-2.5V6c0-2.5-2-4.5-4.5-4.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M7 13.5c0 .83.67 1.5 1.5 1.5S10 14.33 10 13.5" stroke="currentColor" stroke-width="1.3"/>
+        </svg>
+        <span class="notif-dot" id="notifDot" style="display:none"></span>
+      </button>
+
+      <!-- Notif Panel -->
+      <div class="notif-panel" id="notifPanel" style="display:none">
+        <div class="notif-header">
+          <span class="notif-title">Notifikasi</span>
+          <button class="notif-clear" onclick="clearNotifs()">Tandai semua dibaca</button>
+        </div>
+        <div class="notif-list" id="notifList">
+          <div class="notif-empty">
+            <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style="opacity:0.25">
+              <circle cx="16" cy="16" r="14" stroke="#0B50A1" stroke-width="1.5"/>
+              <path d="M16 10v6l3 3" stroke="#0B50A1" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <p>Tidak ada notifikasi baru</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div class="navbar-divider"></div>
+
+    <!-- Profile Dropdown -->
+    <div class="navbar-profile">
+      <button class="btn-profile" onclick="toggleProfileMenu()" id="profileBtn">
+        <div class="profile-avatar" id="navAvatar">GD</div>
+        <div class="profile-info">
+          <span class="profile-name" id="navUsername">Loading...</span>
+          <span class="profile-role" id="navRole">—</span>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="color:#7a8899; flex-shrink:0">
+          <path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <!-- Profile menu -->
+      <div class="profile-menu" id="profileMenu" style="display:none">
+        <div class="profile-menu-header">
+          <div class="profile-avatar-lg" id="navAvatarLg">GD</div>
+          <div>
+            <div class="profile-menu-name" id="navFullname">—</div>
+            <div class="profile-menu-email" id="navEmail">—</div>
+          </div>
+        </div>
+        <div class="profile-menu-divider"></div>
+        <button class="profile-menu-item" onclick="openPage('ubah-password')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.5a2.5 2.5 0 015 0V6" stroke="currentColor" stroke-width="1.3"/></svg>
+          Ubah Password
+        </button>
+        <button class="profile-menu-item" onclick="openPage('profil')">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 13c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          Profil Saya
+        </button>
+        <div class="profile-menu-divider"></div>
+        <button class="profile-menu-item danger" onclick="handleLogout()">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M9 10l3-3-3-3M12 7H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Keluar
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+</header>
+
+<!-- Search Results Overlay -->
+<div class="search-overlay" id="searchOverlay" style="display:none" onclick="closeSearch()">
+  <div class="search-results" id="searchResults" onclick="event.stopPropagation()">
+    <div class="search-results-header">
+      <span>Hasil pencarian untuk: <strong id="searchQuery"></strong></span>
+      <button onclick="closeSearch()">✕</button>
+    </div>
+    <div id="searchResultsList"></div>
+  </div>
+</div>
+
+<style>
+/* ── Navbar Core ─────────────────────────────── */
+.navbar-wrapper {
+  position: fixed;
+  top: 0; right: 0;
+  left: var(--sidebar-w);
+  height: 60px;
+  background: #ffffff;
+  border-bottom: 1px solid #e8edf5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px 0 20px;
+  z-index: 90;
+  transition: left 0.25s cubic-bezier(.4,0,.2,1);
+}
+
+body.sidebar-collapsed .navbar-wrapper {
+  left: var(--sidebar-w-sm);
+}
+
+/* Left */
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-mobile-menu {
+  display: none;
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid #e8edf5;
+  background: transparent;
+  color: #7a8899;
+  cursor: pointer;
+  align-items: center; justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .btn-mobile-menu { display: flex; }
+  .navbar-wrapper { left: 0 !important; padding: 0 16px; }
+}
+
+.navbar-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.breadcrumb-root {
+  display: flex;
+  align-items: center;
+  color: #7a8899;
+  font-weight: 500;
+}
+
+.breadcrumb-sep {
+  color: #c5ced9;
+  font-size: 14px;
+}
+
+.breadcrumb-current {
+  color: #0f1d35;
+  font-weight: 600;
+}
+
+/* Right */
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Search */
+.navbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f4f7fc;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  padding: 0 12px;
+  height: 36px;
+  transition: all 0.15s;
+  width: 220px;
+}
+
+.navbar-search:focus-within {
+  background: #fff;
+  border-color: #0B50A1;
+  width: 280px;
+  box-shadow: 0 0 0 3px rgba(11,80,161,0.08);
+}
+
+.search-icon { color: #7a8899; flex-shrink: 0; }
+
+.search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12.5px;
+  color: #0f1d35;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-input::placeholder { color: #a0aec0; }
+
+.search-shortcut {
+  font-size: 10px;
+  color: #b0bac9;
+  border: 1px solid #dde5f0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .navbar-search { display: none; }
+}
+
+/* Notif */
+.navbar-notif { position: relative; }
+
+.btn-notif {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  border: 1px solid #e8edf5;
+  background: transparent;
+  color: #4a5568;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  transition: all 0.15s;
+}
+
+.btn-notif:hover { background: #f4f7fc; color: #0B50A1; }
+
+.notif-dot {
+  position: absolute;
+  top: 7px; right: 7px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #CD142C;
+  border: 2px solid white;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  background: white;
+  border: 1px solid #e8edf5;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(11,80,161,0.12);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.notif-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #e8edf5;
+}
+
+.notif-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f1d35;
+}
+
+.notif-clear {
+  font-size: 11px;
+  color: #0B50A1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.notif-list { max-height: 300px; overflow-y: auto; }
+
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: #a0aec0;
+  font-size: 12px;
+}
+
+.notif-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f4f7fc;
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.notif-item:hover { background: #f8fafd; }
+
+.notif-item.unread { background: #f0f6ff; }
+
+.notif-item-icon {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.notif-item-body { flex: 1; }
+.notif-item-title { font-size: 12.5px; font-weight: 600; color: #0f1d35; }
+.notif-item-desc { font-size: 11.5px; color: #7a8899; margin-top: 2px; }
+.notif-item-time { font-size: 10.5px; color: #b0bac9; margin-top: 3px; }
+
+/* Divider */
+.navbar-divider {
+  width: 1px; height: 24px;
+  background: #e8edf5;
+  margin: 0 6px;
+}
+
+/* Profile */
+.navbar-profile { position: relative; }
+
+.btn-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-profile:hover {
+  background: #f4f7fc;
+  border-color: #e8edf5;
+}
+
+.profile-avatar {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--geo-blue);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  letter-spacing: 0.03em;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+@media (max-width: 640px) { .profile-info { display: none; } }
+
+.profile-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f1d35;
+  white-space: nowrap;
+}
+
+.profile-role {
+  font-size: 10px;
+  color: #7a8899;
+  white-space: nowrap;
+}
+
+.profile-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  background: white;
+  border: 1px solid #e8edf5;
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(11,80,161,0.12);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.profile-menu-header {
+  padding: 14px 14px 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid #f0f4fa;
+}
+
+.profile-avatar-lg {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  background: var(--geo-blue);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-menu-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f1d35;
+}
+
+.profile-menu-email {
+  font-size: 10.5px;
+  color: #7a8899;
+}
+
+.profile-menu-divider {
+  height: 1px;
+  background: #f0f4fa;
+  margin: 4px 0;
+}
+
+.profile-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  color: #4a5568;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.profile-menu-item:hover { background: #f4f7fc; color: #0B50A1; }
+.profile-menu-item.danger:hover { background: #fff0f0; color: #CD142C; }
+.profile-menu-item.danger { color: #CD142C; }
+
+/* Search overlay */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,29,53,0.4);
+  backdrop-filter: blur(4px);
+  z-index: 300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+
+.search-results {
+  width: 600px;
+  max-height: 480px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(11,80,161,0.18);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e8edf5;
+  font-size: 12.5px;
+  color: #7a8899;
+}
+</style>
+
+<script>
+
+function initNavbar(userSession) {
+  if (!userSession) return;
+
+  var roleLabels = {
+    USER:'Pengusul', TIM_SURVEY:'Tim Survey',
+    FPBJ:'FPBJ', SCM:'SCM', GM:'General Manager'
+  };
+
+  var names    = userSession.nama_lengkap.split(' ');
+  var initials = names.length > 1 ? names[0][0] + names[names.length-1][0] : names[0].substring(0,2);
+  var init     = initials.toUpperCase();
+
+  var navAvatar = document.getElementById('navAvatar');
+  if (navAvatar)   navAvatar.textContent   = init;
+  var navAvatarLg = document.getElementById('navAvatarLg');
+  if (navAvatarLg) navAvatarLg.textContent = init;
+  var navUsername = document.getElementById('navUsername');
+  if (navUsername) navUsername.textContent = userSession.username;
+  var navRole = document.getElementById('navRole');
+  if (navRole)     navRole.textContent     = roleLabels[userSession.role] || userSession.role;
+  var navFullname = document.getElementById('navFullname');
+  if (navFullname) navFullname.textContent = userSession.nama_lengkap;
+  var navEmail = document.getElementById('navEmail');
+  if (navEmail)    navEmail.textContent    = userSession.email || '-';
+}
+
+function setPageTitle(title) {
+  var el = document.getElementById('navPageTitle');
+  if (el) el.textContent = title;
+}
+
+function toggleNotifPanel() {
+  var p = document.getElementById('notifPanel');
+  var m = document.getElementById('profileMenu');
+  if (m) m.style.display = 'none';
+  if (p) p.style.display = (p.style.display === 'none' ? 'block' : 'none');
+}
+
+function toggleProfileMenu() {
+  var m = document.getElementById('profileMenu');
+  var p = document.getElementById('notifPanel');
+  if (p) p.style.display = 'none';
+  if (m) m.style.display = (m.style.display === 'none' ? 'block' : 'none');
+}
+
+function clearNotifs() {
+  var dot  = document.getElementById('notifDot');
+  var list = document.getElementById('notifList');
+  if (dot)  dot.style.display = 'none';
+  if (list) list.innerHTML = '<div class="notif-empty"><p>Tidak ada notifikasi baru</p></div>';
+}
+
+function addNotification(icon, title, desc, time, bgColor) {
+  var dot  = document.getElementById('notifDot');
+  var list = document.getElementById('notifList');
+  if (!dot || !list) return;
+  dot.style.display = 'block';
+
+  var empty = list.querySelector('.notif-empty');
+  if (empty) list.innerHTML = '';
+
+  var item = document.createElement('div');
+  item.className = 'notif-item unread';
+  item.innerHTML =
+    '<div class="notif-item-icon" style="background:' + (bgColor||'#EFF5FF') + '">' + icon + '</div>' +
+    '<div class="notif-item-body">' +
+      '<div class="notif-item-title">' + title + '</div>' +
+      '<div class="notif-item-desc">' + desc + '</div>' +
+      '<div class="notif-item-time">' + time + '</div>' +
+    '</div>';
+  list.insertBefore(item, list.firstChild);
+}
+
+function onGlobalSearch(q) {
+  if (q.length < 2) return closeSearch();
+  document.getElementById('searchOverlay').style.display = 'flex';
+  document.getElementById('searchQuery').textContent = q;
+  if (window.globalSearch) window.globalSearch(q);
+}
+
+function closeSearch() {
+  var overlay  = document.getElementById('searchOverlay');
+  var searchEl = document.getElementById('globalSearch');
+  if (overlay)  overlay.style.display = 'none';
+  if (searchEl) searchEl.value = '';
+}
+
+function toggleMobileSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.toggle('mobile-open');
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', function(e) {
+  var notifWrap   = document.querySelector('.navbar-notif');
+  var profileWrap = document.querySelector('.navbar-profile');
+  var notifPanel  = document.getElementById('notifPanel');
+  var profileMenu = document.getElementById('profileMenu');
+  if (notifPanel  && notifWrap   && !notifWrap.contains(e.target))   notifPanel.style.display  = 'none';
+  if (profileMenu && profileWrap && !profileWrap.contains(e.target))  profileMenu.style.display = 'none';
+});
+
+// Ctrl+K / Cmd+K shortcut
+document.addEventListener('keydown', function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    var searchEl = document.getElementById('globalSearch');
+    if (searchEl) searchEl.focus();
+  }
+  if (e.key === 'Escape') closeSearch();
+});
+
+</script>

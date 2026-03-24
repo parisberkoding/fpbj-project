@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  login.html — Halaman Login
+  PT. Geo Dipa Energi — Slip Routing System
+  GAS Template: HtmlService.createTemplateFromFile('login')
+  ============================================================
+-->
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Slip Routing GeoDipa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --geo-blue:  #0B50A1;
+      --geo-red:   #CD142C;
+      --geo-lime:  #CEDF51;
+      --geo-green: #8DC63F;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: #f0f4fb;
+      min-height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left Panel ─────────────────────── */
+    .login-panel-left {
+      flex: 1;
+      background: var(--geo-blue);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 52px;
+      overflow: hidden;
+    }
+
+    @media (max-width: 768px) { .login-panel-left { display: none; } }
+
+    /* Geometric background pattern */
+    .geo-pattern {
+      position: absolute;
+      inset: 0;
+      opacity: 0.07;
+      background-image:
+        repeating-linear-gradient(45deg, #CEDF51 0, #CEDF51 1px, transparent 0, transparent 50%),
+        repeating-linear-gradient(-45deg, #CEDF51 0, #CEDF51 1px, transparent 0, transparent 50%);
+      background-size: 48px 48px;
+    }
+
+    .geo-glow {
+      position: absolute;
+      width: 500px; height: 500px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(206,223,81,0.15) 0%, transparent 70%);
+      top: -100px; left: -100px;
+      pointer-events: none;
+    }
+
+    .geo-glow-2 {
+      position: absolute;
+      width: 300px; height: 300px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(141,198,63,0.12) 0%, transparent 70%);
+      bottom: -50px; right: -50px;
+      pointer-events: none;
+    }
+
+    .panel-brand {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .panel-logo {
+      width: 48px; height: 48px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .panel-brand-name {
+      font-family: 'DM Serif Display', Georgia, serif;
+      font-size: 22px;
+      color: white;
+    }
+
+    .panel-brand-sub {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+      margin-top: 2px;
+    }
+
+    .panel-hero {
+      position: relative;
+    }
+
+    .panel-title {
+      font-family: 'DM Serif Display', Georgia, serif;
+      font-size: 38px;
+      line-height: 1.15;
+      color: white;
+      margin-bottom: 16px;
+    }
+
+    .panel-title .accent {
+      color: var(--geo-lime);
+    }
+
+    .panel-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.65;
+      max-width: 380px;
+    }
+
+    /* Flow steps visual */
+    .panel-steps {
+      position: relative;
+      margin-top: 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .panel-step {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 0;
+      position: relative;
+    }
+
+    .panel-step:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 15px; top: calc(100% - 14px);
+      width: 1px; height: 14px;
+      background: rgba(206,223,81,0.3);
+    }
+
+    .step-dot {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(206,223,81,0.4);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--geo-lime);
+    }
+
+    .step-dot.done {
+      background: var(--geo-lime);
+      color: var(--geo-blue);
+      border-color: var(--geo-lime);
+    }
+
+    .step-label { font-size: 13px; color: rgba(255,255,255,0.75); font-weight: 500; }
+    .step-label strong { color: white; }
+
+    .panel-footer {
+      position: relative;
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* ── Right Panel (Form) ─────────────── */
+    .login-panel-right {
+      width: 460px;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 52px 48px;
+      position: relative;
+      overflow-y: auto;
+    }
+
+    @media (max-width: 768px) {
+      .login-panel-right { width: 100%; padding: 32px 24px; }
+    }
+
+    .login-form-header {
+      margin-bottom: 36px;
+    }
+
+    .login-form-title {
+      font-family: 'DM Serif Display', Georgia, serif;
+      font-size: 28px;
+      color: #0f1d35;
+      margin-bottom: 6px;
+    }
+
+    .login-form-sub {
+      font-size: 13.5px;
+      color: #7a8899;
+    }
+
+    /* Form */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #4a5568;
+      margin-bottom: 7px;
+    }
+
+    .form-input-wrapper {
+      position: relative;
+    }
+
+    .form-input-icon {
+      position: absolute;
+      left: 14px; top: 50%; transform: translateY(-50%);
+      color: #a0aec0;
+      pointer-events: none;
+    }
+
+    .form-input {
+      width: 100%;
+      height: 46px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 0 14px 0 42px;
+      font-size: 13.5px;
+      color: #0f1d35;
+      font-family: 'DM Sans', sans-serif;
+      outline: none;
+      transition: all 0.15s;
+      background: #fafbfd;
+    }
+
+    .form-input:focus {
+      border-color: var(--geo-blue);
+      background: white;
+      box-shadow: 0 0 0 3px rgba(11,80,161,0.08);
+    }
+
+    .form-input.error { border-color: var(--geo-red); }
+
+    .form-input-eye {
+      position: absolute;
+      right: 14px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      color: #a0aec0; padding: 4px;
+      transition: color 0.15s;
+    }
+
+    .form-input-eye:hover { color: var(--geo-blue); }
+
+    /* Alert */
+    .login-alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 18px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .login-alert.error {
+      background: #fff0f0;
+      border: 1px solid #ffd0d4;
+      color: #CD142C;
+    }
+
+    .login-alert.success {
+      background: #f0faf0;
+      border: 1px solid #c6efce;
+      color: #2d7a2d;
+    }
+
+    /* Submit btn */
+    .btn-login {
+      width: 100%;
+      height: 48px;
+      background: var(--geo-blue);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-login::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0);
+      transition: background 0.2s;
+    }
+
+    .btn-login:hover::before { background: rgba(255,255,255,0.08); }
+    .btn-login:active { transform: scale(0.99); }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Loading spinner */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Version badge */
+    .version-badge {
+      position: absolute;
+      bottom: 20px;
+      right: 24px;
+      font-size: 10px;
+      color: #c0cad6;
+      font-weight: 500;
+    }
+
+    /* Animate in */
+    .login-panel-right {
+      animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(24px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    .login-panel-left .panel-brand,
+    .login-panel-left .panel-hero,
+    .login-panel-left .panel-steps {
+      animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    .login-panel-left .panel-hero  { animation-delay: 0.1s; }
+    .login-panel-left .panel-steps { animation-delay: 0.2s; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Left Panel ───────────────────────────── -->
+  <div class="login-panel-left">
+    <div class="geo-pattern"></div>
+    <div class="geo-glow"></div>
+    <div class="geo-glow-2"></div>
+
+    <div class="panel-brand">
+      <div class="panel-logo">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <path d="M14 2 L24 8 L24 20 L14 26 L4 20 L4 8 Z" fill="none" stroke="#CEDF51" stroke-width="1.5"/>
+          <path d="M14 8 L19 11 L19 17 L14 20 L9 17 L9 11 Z" fill="#CEDF51" opacity="0.85"/>
+          <circle cx="14" cy="14" r="2.5" fill="var(--geo-blue)"/>
+        </svg>
+      </div>
+      <div>
+        <div class="panel-brand-name">PT. Geo Dipa Energi</div>
+        <div class="panel-brand-sub">Patuha Unit</div>
+      </div>
+    </div>
+
+    <div class="panel-hero">
+      <h1 class="panel-title">
+        Sistem <span class="accent">Routing</span><br>
+        Slip Pengadaan
+      </h1>
+      <p class="panel-desc">
+        Platform digital untuk mengelola seluruh proses pengadaan barang dan jasa — dari perencanaan hingga serah terima, terintegrasi dan terlacak secara real-time.
+      </p>
+
+      <div class="panel-steps">
+        <div class="panel-step">
+          <div class="step-dot done">1</div>
+          <div class="step-label"><strong>Perencanaan</strong> — Pengusul & Market Survey</div>
+        </div>
+        <div class="panel-step">
+          <div class="step-dot">2</div>
+          <div class="step-label"><strong>Tender</strong> — SCM & GM Approval</div>
+        </div>
+        <div class="panel-step">
+          <div class="step-dot">3</div>
+          <div class="step-label"><strong>Kontrak</strong> — Drafting & TTD</div>
+        </div>
+        <div class="panel-step">
+          <div class="step-dot">4</div>
+          <div class="step-label"><strong>Delivery</strong> — Invoice & BAST</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      © 2026 PT. Geo Dipa Energi (Persero) · Unit Patuha
+    </div>
+  </div>
+
+  <!-- ── Right Panel (Form) ───────────────────── -->
+  <div class="login-panel-right">
+
+    <div class="login-form-header">
+      <h2 class="login-form-title">Selamat datang 👋</h2>
+      <p class="login-form-sub">Masuk dengan akun yang diberikan oleh administrator</p>
+    </div>
+
+    <!-- Alert -->
+    <div class="login-alert" id="loginAlert">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" id="alertIcon">
+        <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M8 5v4M8 11v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <span id="alertMsg"></span>
+    </div>
+
+    <form id="loginForm" onsubmit="return false;">
+
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <div class="form-input-wrapper">
+          <span class="form-input-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="5.5" r="3" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M1.5 14c0-3 3-5 6.5-5s6.5 2 6.5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <input type="text" id="username" class="form-input" placeholder="Masukkan username" autocomplete="username" autofocus>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <div class="form-input-wrapper">
+          <span class="form-input-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="7" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
+              <path d="M5 7V5a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </span>
+          <input type="password" id="password" class="form-input" placeholder="Masukkan password" autocomplete="current-password">
+          <button type="button" class="form-input-eye" onclick="togglePassword()" id="eyeBtn">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" id="eyeIcon">
+              <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.3"/>
+              <circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-login" id="loginBtn" onclick="handleLogin()">
+        <span id="btnText">Masuk</span>
+        <div class="spinner" id="loginSpinner"></div>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" id="btnArrow">
+          <path d="M3 8h10M9 4l4 4-4 4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+    </form>
+
+    <div class="version-badge">v1.0.0-prototype</div>
+  </div>
+
+</body>
+
+<script>
+// URL app - diinject GAS server-side
+var WEB_APP_URL = <?!= JSON.stringify(webAppUrl) ?>;
+
+function togglePassword() {
+  var inp = document.getElementById('password');
+  var ico = document.getElementById('eyeIcon');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    ico.innerHTML = '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.3"/><line x1="1" y1="1" x2="15" y2="15" stroke="currentColor" stroke-width="1.3"/>';
+  } else {
+    inp.type = 'password';
+    ico.innerHTML = '<path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/>';
+  }
+}
+
+function showAlert(msg, type) {
+  var el = document.getElementById('loginAlert');
+  el.style.display = 'flex';
+  el.className = 'login-alert ' + type;
+  document.getElementById('alertMsg').textContent = msg;
+}
+
+function setLoading(isLoading) {
+  document.getElementById('loginBtn').disabled = isLoading;
+  document.getElementById('btnText').textContent = isLoading ? 'Memverifikasi...' : 'Masuk';
+  document.getElementById('loginSpinner').style.display = isLoading ? 'block' : 'none';
+  document.getElementById('btnArrow').style.display = isLoading ? 'none' : 'block';
+}
+
+function handleLogin() {
+  var username = document.getElementById('username').value.trim();
+  var password = document.getElementById('password').value;
+
+  if (!username || !password) {
+    showAlert('Username dan password wajib diisi.', 'error');
+    return;
+  }
+
+  setLoading(true);
+
+  // WAJIB pakai google.script.run - fetch() kena CORS block di GAS iframe
+  google.script.run
+    .withSuccessHandler(function(data) {
+      setLoading(false);
+      if (data.success) {
+        showAlert(data.message, 'success');
+        // Redirect ke app dengan token di URL - GAS verify & render maincontent
+        setTimeout(function() {
+          window.top.location.href = WEB_APP_URL + '?page=dashboard&token=' + encodeURIComponent(data.token);
+        }, 600);
+      } else {
+        showAlert(data.message || 'Login gagal.', 'error');
+        document.getElementById('password').classList.add('error');
+      }
+    })
+    .withFailureHandler(function(err) {
+      setLoading(false);
+      showAlert('Server error: ' + err.message, 'error');
+    })
+    .handleLogin({ action: 'login', username: username, password: password });
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') handleLogin();
+});
+
+document.getElementById('password').addEventListener('input', function() {
+  this.classList.remove('error');
+});
+</script>
+</html>

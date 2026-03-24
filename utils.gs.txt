@@ -1,0 +1,272 @@
+/**
+ * utils.gs - Shared Utilities
+ */
+
+function generateId() {
+  return Utilities.getUuid();
+}
+
+function generateToken() {
+  var rand = Math.random().toString(36).substring(2);
+  var ts   = Date.now().toString(36);
+  return 'tok_' + ts + '_' + rand;
+}
+
+function generateKode(prefix, sheetName, kodeColumn) {
+  var sheet    = getSheet(sheetName);
+  var data     = sheet.getDataRange().getValues();
+  var H        = arrayToIndex(data[0]);
+  var d        = new Date();
+  var year     = d.getFullYear().toString();
+  var month    = ('0' + (d.getMonth() + 1)).slice(-2);
+  var prefix_ym = prefix + '-' + year + '-' + month + '-';
+  var existing = 0;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][H[kodeColumn]]).indexOf(prefix_ym) === 0) existing++;
+  }
+  return prefix_ym + ('000' + (existing + 1)).slice(-4);
+}
+
+function now() {
+  return Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
+}
+
+function nowDate() {
+  return Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+}
+
+function arrayToIndex(headers) {
+  var map = {};
+  for (var i = 0; i < headers.length; i++) map[headers[i]] = i;
+  return map;
+}
+
+function rowToObject(row, H) {
+  var obj = {};
+  for (var key in H) {
+    if (H.hasOwnProperty(key)) obj[key] = row[H[key]];
+  }
+  return obj;
+}
+
+function sheetToObjects(sheetName) {
+  var sheet = getSheet(sheetName);
+  var data  = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  var H      = arrayToIndex(data[0]);
+  var result = [];
+  for (var i = 1; i < data.length; i++) result.push(rowToObject(data[i], H));
+  return result;
+}
+
+function getRowByField(sheetName, field, value) {
+  var objects = sheetToObjects(sheetName);
+  for (var i = 0; i < objects.length; i++) {
+    if (objects[i][field] === value) return objects[i];
+  }
+  return null;
+}
+
+function updateRowById(sheetName, id, updates) {
+  var sheet   = getSheet(sheetName);
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var H       = arrayToIndex(headers);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === id) {
+      for (var key in updates) {
+        if (updates.hasOwnProperty(key) && H[key] !== undefined) {
+          sheet.getRange(i + 1, H[key] + 1).setValue(updates[key]);
+        }
+      }
+      if (H.updated_at !== undefined) {
+        sheet.getRange(i + 1, H.updated_at + 1).setValue(now());
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+function uploadFileToDrive(base64Data, mimeType, filename, folderId) {
+  var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, filename);
+  var file;
+  if (folderId) {
+    var folder = DriveApp.getFolderById(folderId);
+    file = folder.createFile(blob);
+  } else {
+    file = DriveApp.createFile(blob);
+  }
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return file.getUrl();
+}
+
+function getOrCreateFolder(parentFolderId, folderPath) {
+  var parts  = folderPath.split('/');
+  var parent;
+  try {
+    parent = parentFolderId ? DriveApp.getFolderById(parentFolderId) : DriveApp.getRootFolder();
+  } catch (e) {
+    parent = DriveApp.getRootFolder();
+  }
+  for (var i = 0; i < parts.length; i++) {
+    var name = parts[i];
+    if (!name) continue;
+    var iter = parent.getFoldersByName(name);
+    parent   = iter.hasNext() ? iter.next() : parent.createFolder(name);
+  }
+  return parent;
+}
+
+function writeAuditLog(session, action, payload) {
+  try {
+    var sheet   = getSheet(SHEETS.AUDIT_LOG);
+    var summary = JSON.stringify(payload).substring(0, 300);
+    sheet.appendRow([
+      generateId(), now(),
+      session.user_id, session.kode_user, session.username, session.role,
+      action, summary
+    ]);
+  } catch (e) {
+    Logger.log('Audit log error: ' + e.message);
+  }
+}
+
+// ============================================================
+// KODE GENERATORS
+// ============================================================
+
+function generateKodeUser(role) {
+  var prefixMap = { USER:'USR', TIM_SURVEY:'SRV', SCM:'SCM', GM:'GM' };
+  var prefix = prefixMap[role] || 'USR';
+  return generateKode(prefix, SHEETS.USERS, 'kode_user');
+}
+
+function generateKodeRencana() {
+  return generateKode('RNC', SHEETS.RENCANA, 'kode_rencana');
+}
+
+function generateKodeTender() {
+  return generateKode('TND', SHEETS.TENDER, 'kode_tender');
+}
+
+function generateKodeContract() {
+  return generateKode('CTR', SHEETS.CONTRACT, 'kode_contract');
+}
+
+function generateKodeDelivery() {
+  return generateKode('DLV', SHEETS.DELIVERY, 'kode_delivery');
+}
+
+// ============================================================
+// PASSWORD
+// ============================================================
+
+function hashPassword(plain) {
+  var salt  = 'GEODIPA_SLIP_ROUTING_2026';
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    plain + salt,
+    Utilities.Charset.UTF_8
+  );
+  var hex = '';
+  for (var i = 0; i < bytes.length; i++) {
+    var b = ('0' + (bytes[i] & 0xff).toString(16)).slice(-2);
+    hex += b;
+  }
+  return hex;
+}
+
+function verifyPassword(plain, hash) {
+  return hashPassword(plain) === hash;
+}
+
+// ============================================================
+// DOC STATUS LOGIC
+// ============================================================
+
+function computeDocStatus(currentStatus, viewCount, viewDurationSec) {
+  if (currentStatus === DOC_STATUS.APPROVED || currentStatus === DOC_STATUS.REJECTED) {
+    return currentStatus;
+  }
+  if (!viewCount || viewCount === 0) return DOC_STATUS.PENDING;
+  if (viewCount === 1) return DOC_STATUS.PEER_REVIEWED;
+  if (viewDurationSec >= 300) return DOC_STATUS.REVIEWED;
+  return DOC_STATUS.PEER_REVIEWED;
+}
+
+// ============================================================
+// GENERATE TOKEN
+// ============================================================
+
+function generateToken() {
+  var rand = Math.random().toString(36).substring(2);
+  var ts   = Date.now().toString(36);
+  return 'tok_' + ts + '_' + rand;
+}
+
+// ============================================================
+// DASHBOARD DATA - per role
+// ============================================================
+
+function getDashboardData(session) {
+  var role      = session.role;
+  var rencanaAll = sheetToObjects(SHEETS.RENCANA);
+  var tenderAll  = sheetToObjects(SHEETS.TENDER);
+  var summary    = {};
+
+  if (role === ROLES.USER) {
+    var mine = rencanaAll.filter(function(r) { return r.kode_user_pengusul === session.kode_user; });
+    summary = {
+      total_rencana: mine.length,
+      pending:  mine.filter(function(r) { return r.status === DOC_STATUS.PENDING; }).length,
+      approved: mine.filter(function(r) { return r.status === DOC_STATUS.APPROVED; }).length,
+      revised:  mine.filter(function(r) { return r.status === DOC_STATUS.REVISED; }).length,
+      rejected: mine.filter(function(r) { return r.status === DOC_STATUS.REJECTED; }).length,
+      latest: mine.slice(-5).reverse()
+    };
+
+  } else if (role === ROLES.TIM_SURVEY) {
+    var needReview = rencanaAll.filter(function(r) {
+      return !r.survey_approval || r.survey_approval === '' || r.survey_approval === DOC_STATUS.PENDING;
+    });
+    summary = {
+      total_rencana:     rencanaAll.length,
+      need_review:       needReview.length,
+      already_reviewed:  rencanaAll.filter(function(r) { return r.survey_approval === DOC_STATUS.APPROVED; }).length,
+      latest_pending:    needReview.slice(0, 5)
+    };
+
+  } else if (role === ROLES.SCM) {
+    var myTender = tenderAll.filter(function(t) { return t.kode_user_scm === session.kode_user; });
+    summary = {
+      total_rencana:   rencanaAll.filter(function(r) { return r.status === DOC_STATUS.APPROVED; }).length,
+      total_tender:    myTender.length,
+      tender_active:   myTender.filter(function(t) { return t.status_dokumen !== DOC_STATUS.APPROVED && t.status_dokumen !== DOC_STATUS.REJECTED; }).length,
+      tender_done:     myTender.filter(function(t) { return t.status_dokumen === DOC_STATUS.APPROVED; }).length,
+      need_action:     myTender.filter(function(t) {
+        return t.status_tahap === 'DRAFTING_RKS_HPS' || t.status_tahap === 'KLARIFIKASI_NEGOSIASI';
+      }).length,
+      latest: myTender.slice(-5).reverse()
+    };
+
+  } else if (role === ROLES.GM) {
+    var pendingRencana = rencanaAll.filter(function(r) {
+      return !r.gm_approval || r.gm_approval === '' || r.gm_approval === DOC_STATUS.PENDING;
+    });
+    var pendingTender = tenderAll.filter(function(t) {
+      return t.status_tahap === 'APPROVAL_RKS' || t.status_tahap === 'PERSETUJUAN_BAHP' || t.status_tahap === 'TTD_SKPP';
+    });
+    var latestNeedAction = pendingRencana.slice(0,3).concat(pendingTender.slice(0,3));
+    summary = {
+      total_rencana:           rencanaAll.length,
+      pending_approval:        pendingRencana.length,
+      approved_rencana:        rencanaAll.filter(function(r) { return r.gm_approval === DOC_STATUS.APPROVED; }).length,
+      total_tender:            tenderAll.length,
+      tender_pending_approval: pendingTender.length,
+      latest_need_action:      latestNeedAction
+    };
+  }
+
+  return { success: true, role: role, data: summary };
+}

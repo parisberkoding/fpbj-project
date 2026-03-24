@@ -1,0 +1,345 @@
+/**
+ * tender.gs - Tender Management
+ *
+ * Flow:
+ *   SCM  -> buat tender, update tahap & notes progress
+ *   GM   -> approve RKS, approve BAHP, TTD SKPP
+ *   USER -> input Nomor PO SAP setelah PO dibuat
+ *
+ * Tahapan:
+ *   DRAFTING_RKS_HPS -> APPROVAL_RKS -> UNDANGAN -> PENJELASAN_RKS
+ *   -> PEMASUKAN_PENAWARAN -> KLARIFIKASI_NEGOSIASI
+ *   -> PERSETUJUAN_BAHP -> TTD_SKPP -> CREATE_PO -> SELESAI
+ */
+
+var TENDER_TAHAP = {
+  DRAFTING_RKS_HPS:     'DRAFTING_RKS_HPS',
+  APPROVAL_RKS:         'APPROVAL_RKS',
+  UNDANGAN:             'UNDANGAN',
+  PENJELASAN_RKS:       'PENJELASAN_RKS',
+  PEMASUKAN_PENAWARAN:  'PEMASUKAN_PENAWARAN',
+  KLARIFIKASI_NEGOSIASI:'KLARIFIKASI_NEGOSIASI',
+  PERSETUJUAN_BAHP:     'PERSETUJUAN_BAHP',
+  TTD_SKPP:             'TTD_SKPP',
+  CREATE_PO:            'CREATE_PO',
+  SELESAI:              'SELESAI'
+};
+
+var TENDER_TAHAP_ORDER = [
+  'DRAFTING_RKS_HPS','APPROVAL_RKS','UNDANGAN','PENJELASAN_RKS',
+  'PEMASUKAN_PENAWARAN','KLARIFIKASI_NEGOSIASI',
+  'PERSETUJUAN_BAHP','TTD_SKPP','CREATE_PO','SELESAI'
+];
+
+var TENDER_TAHAP_LABELS = {
+  DRAFTING_RKS_HPS:     'Drafting RKS & HPS',
+  APPROVAL_RKS:         'Approval RKS oleh GM',
+  UNDANGAN:             'Undangan Peserta',
+  PENJELASAN_RKS:       'Penjelasan RKS',
+  PEMASUKAN_PENAWARAN:  'Pemasukan & Pembukaan Penawaran',
+  KLARIFIKASI_NEGOSIASI:'Klarifikasi & Negosiasi',
+  PERSETUJUAN_BAHP:     'Persetujuan BAHP oleh GM',
+  TTD_SKPP:             'TTD SKPP oleh GM',
+  CREATE_PO:            'Create PO di SAP',
+  SELESAI:              'Selesai'
+};
+
+// ============================================================
+// CREATE TENDER - SCM only
+// ============================================================
+
+function createTender(session, payload) {
+  if (session.role !== ROLES.SCM) {
+    return { success: false, message: 'Hanya SCM yang bisa membuat tender.' };
+  }
+  if (!payload.kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
+
+  var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', payload.kode_rencana);
+  if (!rencana) return { success: false, message: 'Rencana tidak ditemukan.' };
+  if (rencana.status !== DOC_STATUS.APPROVED) {
+    return { success: false, message: 'Rencana belum APPROVED. Status saat ini: ' + rencana.status };
+  }
+
+  var existing = sheetToObjects(SHEETS.TENDER).filter(function(t) {
+    return t.kode_rencana === payload.kode_rencana;
+  });
+  if (existing.length > 0) {
+    return { success: false, message: 'Tender untuk rencana ini sudah ada: ' + existing[0].kode_tender };
+  }
+
+  var kode = generateKodeTender();
+  var id   = generateId();
+  var sheet = getSheet(SHEETS.TENDER);
+
+  sheet.appendRow([
+    id, kode, payload.kode_rencana,              // col1-3
+    session.user_id, session.kode_user, session.nama_lengkap, // col4-6
+    TENDER_TAHAP.DRAFTING_RKS_HPS, DOC_STATUS.DRAFT, // col7-8: status_tahap, status_dokumen
+    '', '', '', '', '',                           // col9-13: link_rks,hps,bahp,skpp,final_po
+    '', '', '',                                   // col14-16: rks_approval,at,notes
+    '', '', '',                                   // col17-19: bahp_approval,at,notes
+    '', '',                                       // col20-21: skpp_upload_at, skpp_link
+    '', '', '',                                   // col22-24: nomer_po_sap,tanggal_po,pj_po
+    now(), now(), ''                              // col25-27: created_at,updated_at,closed_at
+  ]);
+
+  _addTenderLog(kode, payload.kode_rencana, session, TENDER_TAHAP.DRAFTING_RKS_HPS, DOC_STATUS.DRAFT, 'Tender dibuat oleh SCM.', '');
+
+  return { success: true, message: 'Tender berhasil dibuat. Kode: ' + kode, kode_tender: kode, id: id };
+}
+
+// ============================================================
+// UPDATE TENDER PROGRESS - SCM updates tahap + notes
+// SCM does NOT approve - that is GM's job
+// ============================================================
+
+function updateTenderProgress(session, payload) {
+  if (session.role !== ROLES.SCM) {
+    return { success: false, message: 'Hanya SCM yang bisa mengupdate progress tender.' };
+  }
+  if (!payload.kode_tender) return { success: false, message: 'kode_tender wajib.' };
+
+  var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
+  if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
+
+  // Verify SCM owns this tender
+  if (tender.kode_user_scm !== session.kode_user) {
+    return { success: false, message: 'Anda tidak menangani tender ini.' };
+  }
+
+  var newTahap = payload.new_tahap;
+  var notes    = payload.notes || '';
+
+  if (newTahap && TENDER_TAHAP_ORDER.indexOf(newTahap) === -1) {
+    return { success: false, message: 'Tahap tidak valid.' };
+  }
+
+  // Block: SCM cannot directly set approval tahap - GM must do it
+  if (newTahap === TENDER_TAHAP.APPROVAL_RKS || newTahap === TENDER_TAHAP.PERSETUJUAN_BAHP || newTahap === TENDER_TAHAP.TTD_SKPP) {
+    return { success: false, message: 'Tahap ini hanya bisa diupdate oleh GM setelah approval.' };
+  }
+
+  var updates = {};
+  if (newTahap) {
+    var currIdx = TENDER_TAHAP_ORDER.indexOf(tender.status_tahap);
+    var newIdx  = TENDER_TAHAP_ORDER.indexOf(newTahap);
+    if (newIdx < currIdx) {
+      return { success: false, message: 'Tidak bisa mundur ke tahap sebelumnya.' };
+    }
+    updates.status_tahap   = newTahap;
+    updates.status_dokumen = DOC_STATUS.PENDING;
+  }
+  // notes stored in status log, not in main tender row (no scm_notes col in sheet)
+
+  updateRowById(SHEETS.TENDER, tender.id, updates);
+  _addTenderLog(payload.kode_tender, tender.kode_rencana, session,
+    newTahap || tender.status_tahap, DOC_STATUS.PENDING,
+    notes || 'Progress diupdate oleh SCM.', '');
+
+  return { success: true, message: 'Progress tender berhasil diupdate ke: ' + (TENDER_TAHAP_LABELS[newTahap] || newTahap) };
+}
+
+// ============================================================
+// UPLOAD DOKUMEN TENDER - SCM uploads RKS/HPS/BAHP/SKPP
+// ============================================================
+
+function uploadDokumenTender(session, payload) {
+  if (session.role !== ROLES.SCM && session.role !== ROLES.GM) {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+  if (!payload.kode_tender || !payload.file_base64 || !payload.file_name || !payload.mime_type || !payload.doc_type) {
+    return { success: false, message: 'Field wajib tidak lengkap.' };
+  }
+
+  var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
+  if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
+
+  var subfolder = getOrCreateFolder('1i9Db8P9VKLrF8cIhLa5FeopR-KMcBx2j', 'Tender_' + payload.kode_tender);
+  var link      = uploadFileToDrive(payload.file_base64, payload.mime_type, payload.file_name, subfolder.getId());
+
+  var colMap = {
+    'rks':  'link_dokumen_rks',
+    'hps':  'link_dokumen_hps',
+    'bahp': 'link_dokumen_bahp',
+    'skpp': 'skpp_link',
+    'po':   'link_dokumen_final_po'
+  };
+
+  var col = colMap[payload.doc_type];
+  if (!col) return { success: false, message: 'doc_type tidak valid. Pilih: rks/hps/bahp/skpp/po' };
+
+  var updates = {};
+  updates[col] = link;
+  if (payload.doc_type === 'skpp') updates.skpp_upload_at = now();
+
+  // Auto-advance to approval tahap after upload
+  var tahapAfterUpload = { 'rks': TENDER_TAHAP.APPROVAL_RKS, 'bahp': TENDER_TAHAP.PERSETUJUAN_BAHP };
+  if (tahapAfterUpload[payload.doc_type]) {
+    updates.status_tahap   = tahapAfterUpload[payload.doc_type];
+    updates.status_dokumen = DOC_STATUS.PENDING;
+    _addTenderLog(payload.kode_tender, tender.kode_rencana, session,
+      tahapAfterUpload[payload.doc_type], DOC_STATUS.PENDING,
+      'Dokumen ' + payload.doc_type.toUpperCase() + ' diupload, menunggu approval GM.', link);
+  }
+
+  updateRowById(SHEETS.TENDER, tender.id, updates);
+  return { success: true, message: 'Dokumen ' + payload.doc_type.toUpperCase() + ' berhasil diupload.', link: link };
+}
+
+// ============================================================
+// APPROVE TENDER - GM only
+// ============================================================
+
+function approveTender(session, payload) {
+  if (session.role !== ROLES.GM) {
+    return { success: false, message: 'Hanya GM yang bisa meng-approve tender.' };
+  }
+  if (!payload.kode_tender || !payload.action || !payload.doc_type) {
+    return { success: false, message: 'kode_tender, action, doc_type wajib.' };
+  }
+  if (['approve','reject','revise'].indexOf(payload.action) === -1) {
+    return { success: false, message: 'Action harus: approve / reject / revise.' };
+  }
+
+  var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
+  if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
+
+  var statusMap = { approve: DOC_STATUS.APPROVED, reject: DOC_STATUS.REJECTED, revise: DOC_STATUS.REVISED };
+  var newStatus = statusMap[payload.action];
+  var updates   = {};
+
+  if (payload.doc_type === 'rks') {
+    updates.rks_approval   = newStatus;
+    updates.rks_approve_at = now();
+    updates.rks_notes      = payload.catatan || '';
+    if (payload.action === 'approve') {
+      updates.status_tahap   = TENDER_TAHAP.UNDANGAN;
+      updates.status_dokumen = DOC_STATUS.PENDING;
+    } else {
+      updates.status_dokumen = newStatus;
+    }
+  } else if (payload.doc_type === 'bahp') {
+    updates.bahp_approval   = newStatus;
+    updates.bahp_approve_at = now();
+    updates.bahp_notes      = payload.catatan || '';
+    if (payload.action === 'approve') {
+      updates.status_tahap   = TENDER_TAHAP.TTD_SKPP;
+      updates.status_dokumen = DOC_STATUS.PENDING;
+    } else {
+      updates.status_dokumen = newStatus;
+    }
+  } else if (payload.doc_type === 'skpp') {
+    if (payload.action === 'approve') {
+      updates.status_tahap   = TENDER_TAHAP.CREATE_PO;
+      updates.status_dokumen = DOC_STATUS.PENDING;
+    } else {
+      updates.status_dokumen = newStatus;
+    }
+  } else {
+    return { success: false, message: 'doc_type harus: rks / bahp / skpp' };
+  }
+
+  updateRowById(SHEETS.TENDER, tender.id, updates);
+  _addTenderLog(payload.kode_tender, tender.kode_rencana, session,
+    updates.status_tahap || tender.status_tahap, newStatus, payload.catatan || '', '');
+
+  var msg = payload.doc_type.toUpperCase() + ' ' +
+    (payload.action === 'approve' ? 'disetujui' : payload.action === 'reject' ? 'ditolak' : 'diminta revisi') +
+    ' oleh GM.';
+  return { success: true, message: msg };
+}
+
+// ============================================================
+// INPUT PO SAP - USER inputs PO number after tender complete
+// ============================================================
+
+function updatePOData(session, payload) {
+  if (session.role !== ROLES.USER && session.role !== ROLES.SCM) {
+    return { success: false, message: 'Akses ditolak.' };
+  }
+  if (!payload.kode_tender) return { success: false, message: 'kode_tender wajib.' };
+
+  var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
+  if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
+
+  updateRowById(SHEETS.TENDER, tender.id, {
+    nomer_po_sap:         payload.nomer_po_sap || '',
+    tanggal_create_po:    payload.tanggal_create_po || '',
+    penanggung_jawab_po:  payload.penanggung_jawab_po || '',
+    status_tahap:         TENDER_TAHAP.SELESAI,
+    status_dokumen:       DOC_STATUS.APPROVED,
+    closed_at:            now()
+  });
+
+  _addTenderLog(payload.kode_tender, tender.kode_rencana, session,
+    TENDER_TAHAP.SELESAI, DOC_STATUS.APPROVED,
+    'PO SAP dibuat: ' + (payload.nomer_po_sap || '-'), '');
+
+  return { success: true, message: 'Data PO SAP berhasil disimpan. Tender selesai!' };
+}
+
+// ============================================================
+// READ
+// ============================================================
+
+function getTenderList(session, payload) {
+  var all    = sheetToObjects(SHEETS.TENDER);
+  var role   = session.role;
+  var page   = parseInt(payload.page  || 1);
+  var limit  = parseInt(payload.limit || 20);
+  var filter = payload.filter || {};
+  var data   = all;
+
+  if (role === ROLES.SCM) {
+    data = data.filter(function(r) { return r.kode_user_scm === session.kode_user; });
+  }
+  if (role === ROLES.USER) {
+    var myRencana = sheetToObjects(SHEETS.RENCANA)
+      .filter(function(r) { return r.kode_user_pengusul === session.kode_user; })
+      .map(function(r) { return r.kode_rencana; });
+    data = data.filter(function(t) { return myRencana.indexOf(t.kode_rencana) !== -1; });
+  }
+
+  if (filter.tahap) {
+    data = data.filter(function(r) { return r.status_tahap === filter.tahap; });
+  }
+  if (filter.search) {
+    var q = filter.search.toLowerCase();
+    data = data.filter(function(r) {
+      return (r.kode_tender || '').toLowerCase().indexOf(q) !== -1 ||
+             (r.kode_rencana || '').toLowerCase().indexOf(q) !== -1;
+    });
+  }
+
+  data.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
+
+  var total = data.length;
+  var items = data.slice((page-1)*limit, page*limit);
+  return { success: true, data: items, pagination: { page: page, limit: limit, total: total, totalPage: Math.ceil(total/limit) } };
+}
+
+function getTenderDetail(session, payload) {
+  if (!payload.kode_tender) return { success: false, message: 'kode_tender wajib.' };
+  var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
+  if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
+
+  var logs = sheetToObjects(SHEETS.TENDER_STATUS)
+    .filter(function(s) { return s.kode_tender === payload.kode_tender; })
+    .sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
+
+  var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', tender.kode_rencana);
+  return { success: true, data: tender, status_logs: logs, rencana: rencana };
+}
+
+// ============================================================
+// INTERNAL
+// ============================================================
+
+function _addTenderLog(kode_tender, kode_rencana, session, tahap, status, catatan, link) {
+  var sheet = getSheet(SHEETS.TENDER_STATUS);
+  sheet.appendRow([
+    generateId(), kode_tender, kode_rencana,
+    session.user_id, session.kode_user, session.nama_lengkap, session.role,
+    tahap, status, catatan || '', link || '', now()
+  ]);
+}

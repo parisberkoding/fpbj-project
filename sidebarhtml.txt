@@ -1,0 +1,645 @@
+<!--
+  ============================================================
+  sidebar.html — Sidebar Navigation Partial
+  PT. Geo Dipa Energi — Slip Routing System
+  
+  Usage in GAS (di dalam maincontent.html):
+    <?!= include('sidebar') ?>
+  
+  initSidebar(userSession) dipanggil dari maincontent.html
+  setelah template di-render dan DOM siap.
+  ============================================================
+-->
+<aside id="sidebar" class="sidebar-wrapper">
+  
+  <!-- Brand -->
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect width="32" height="32" rx="8" fill="#0B50A1"/>
+        <path d="M16 4 L26 10 L26 22 L16 28 L6 22 L6 10 Z" fill="none" stroke="#CEDF51" stroke-width="1.5"/>
+        <path d="M16 10 L21 13 L21 19 L16 22 L11 19 L11 13 Z" fill="#CEDF51" opacity="0.9"/>
+        <circle cx="16" cy="16" r="2.5" fill="#0B50A1"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-name">GeoDipa</span>
+        <span class="brand-sub">Slip Routing</span>
+      </div>
+    </div>
+    <button id="sidebarToggle" class="sidebar-toggle" onclick="toggleSidebar()">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Role Badge -->
+  <div class="sidebar-role">
+    <div class="role-chip" id="sidebarRoleChip">
+      <span class="role-dot"></span>
+      <span id="sidebarRoleLabel">—</span>
+    </div>
+    <span class="role-name" id="sidebarUsername">Loading...</span>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="sidebar-nav">
+
+    <!-- Dashboard — semua role -->
+    <div class="nav-section-label">Utama</div>
+    <a href="#" class="nav-item active" data-page="dashboard" onclick="navigateTo('dashboard', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <rect x="1" y="1" width="6.5" height="6.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+          <rect x="10.5" y="1" width="6.5" height="6.5" rx="1.5" fill="currentColor" opacity="0.5"/>
+          <rect x="1" y="10.5" width="6.5" height="6.5" rx="1.5" fill="currentColor" opacity="0.5"/>
+          <rect x="10.5" y="10.5" width="6.5" height="6.5" rx="1.5" fill="currentColor" opacity="0.9"/>
+        </svg>
+      </span>
+      <span class="nav-label">Dashboard</span>
+    </a>
+
+    <!-- FLOW 1: Perencanaan - USER, TIM_SURVEY, GM, SCM -->
+    <div class="nav-section-label nav-role-gate" data-roles="USER,TIM_SURVEY,GM,SCM">Perencanaan</div>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="USER" data-page="rencana-baru" onclick="navigateTo('rencana-baru', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 1v16M1 9h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Buat Rencana</span>
+    </a>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="USER,TIM_SURVEY,GM,SCM" data-page="rencana-list" onclick="navigateTo('rencana-list', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M3 4h12M3 8h12M3 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Daftar Rencana</span>
+      <span class="nav-badge" id="badge-rencana"></span>
+    </a>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="TIM_SURVEY,GM" data-page="approval-rencana" onclick="navigateTo('approval-rencana', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M4 9l3.5 3.5L14 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="9" cy="9" r="8" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </span>
+      <span class="nav-label">Approval Rencana</span>
+      <span class="nav-badge badge-alert" id="badge-approval-rencana"></span>
+    </a>
+
+    <!-- FLOW 2: Tender — SCM, GM, USER (read) -->
+    <div class="nav-section-label nav-role-gate" data-roles="SCM,GM,USER">Tender</div>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="SCM" data-page="tender-baru" onclick="navigateTo('tender-baru', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M14 2H4a1 1 0 00-1 1v12a1 1 0 001 1h10a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M6 7h6M6 10h4M9 4v.01" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M11 13l1.5 1.5" stroke="#8DC63F" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Buat Tender</span>
+    </a>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="SCM,GM,USER" data-page="tender-list" onclick="navigateTo('tender-list', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M2 5a1 1 0 011-1h12a1 1 0 011 1v9a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2 8h14" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M6 11h1M9 11h1M12 11h1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Daftar Tender</span>
+      <span class="nav-badge" id="badge-tender"></span>
+    </a>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="GM" data-page="approval-tender" onclick="navigateTo('approval-tender', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M9 1L2 5v5c0 4.4 3 8.2 7 9 4-0.8 7-4.6 7-9V5L9 1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M6 9l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Approval Tender</span>
+      <span class="nav-badge badge-alert" id="badge-approval-tender"></span>
+    </a>
+
+    <!-- FLOW 3: Contract -->
+    <div class="nav-section-label nav-role-gate" data-roles="SCM,GM,USER">Kontrak</div>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="SCM,GM,USER" data-page="contract-list" onclick="navigateTo('contract-list', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M4 1h10l3 3v12a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M11 1v4h4" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Manajemen Kontrak</span>
+    </a>
+
+    <!-- FLOW 4: Delivery -->
+    <div class="nav-section-label nav-role-gate" data-roles="SCM,GM,USER">Pengiriman</div>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="SCM,USER,GM" data-page="delivery-list" onclick="navigateTo('delivery-list', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M1 5l4-3h8l4 3v7l-4 3H5L1 12V5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+          <path d="M9 5v6M6 8l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Delivery Monitoring</span>
+    </a>
+
+    <!-- Admin — GM only -->
+    <div class="nav-section-label nav-role-gate" data-roles="GM">Administrasi</div>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="GM" data-page="user-management" onclick="navigateTo('user-management', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <circle cx="9" cy="6" r="3.5" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2 16c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Manajemen User</span>
+    </a>
+
+    <a href="#" class="nav-item nav-role-gate" data-roles="GM,SCM" data-page="audit-log" onclick="navigateTo('audit-log', this)">
+      <span class="nav-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+          <path d="M3 3h12v12H3z" stroke="currentColor" stroke-width="1.3" rx="1"/>
+          <path d="M6 7h6M6 10h4M6 13h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="nav-label">Audit Log</span>
+    </a>
+
+  </nav>
+
+  <!-- Sidebar Footer -->
+  <div class="sidebar-footer">
+    <div class="footer-user" id="sidebarFooterUser">
+      <div class="footer-avatar" id="sidebarAvatar">GD</div>
+      <div class="footer-info">
+        <span class="footer-fullname" id="sidebarFullname">Loading...</span>
+        <span class="footer-divisi" id="sidebarDivisi">—</span>
+      </div>
+    </div>
+    <button class="btn-logout" onclick="handleLogout()" title="Logout">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M10 11l3-3-3-3M13 8H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+
+</aside>
+
+<style>
+/* ── Sidebar Core ─────────────────────────────── */
+:root {
+  --geo-blue:     #0B50A1;
+  --geo-blue-dk:  #083d7c;
+  --geo-red:      #CD142C;
+  --geo-lime:     #CEDF51;
+  --geo-green:    #8DC63F;
+  --geo-black:    #000000;
+
+  --sidebar-w:    256px;
+  --sidebar-w-sm: 68px;
+  --sidebar-bg:   #ffffff;
+  --sidebar-bdr:  #e8edf5;
+  --text-primary: #0f1d35;
+  --text-muted:   #7a8899;
+  --nav-hover:    #f0f4fa;
+  --nav-active-bg:#EFF5FF;
+  --nav-active-c: #0B50A1;
+}
+
+.sidebar-wrapper {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-bdr);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: width 0.25s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+
+.sidebar-wrapper.collapsed {
+  width: var(--sidebar-w-sm);
+}
+
+/* Brand */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 16px 16px;
+  border-bottom: 1px solid var(--sidebar-bdr);
+  min-height: 68px;
+}
+
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 0.2s;
+}
+
+.brand-name {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--geo-blue);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+.brand-sub {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar-toggle {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--sidebar-bdr);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.sidebar-toggle:hover {
+  background: var(--nav-hover);
+  color: var(--geo-blue);
+}
+
+/* Role chip */
+.sidebar-role {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--sidebar-bdr);
+}
+
+.role-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: #EFF5FF;
+  border: 1px solid #c5d9f5;
+  border-radius: 20px;
+  padding: 3px 9px;
+  flex-shrink: 0;
+}
+
+.role-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--geo-green);
+}
+
+#sidebarRoleLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--geo-blue);
+  white-space: nowrap;
+}
+
+.role-name {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity 0.2s;
+}
+
+/* Nav */
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: #e0e7f0 transparent;
+}
+
+.nav-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 16px 18px 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px 9px 16px;
+  margin: 1px 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.14s ease;
+  position: relative;
+}
+
+.nav-item:hover {
+  background: var(--nav-hover);
+  color: var(--text-primary);
+}
+
+.nav-item.active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-c);
+  font-weight: 600;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px; top: 6px; bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--geo-blue);
+}
+
+.nav-icon {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity 0.2s;
+}
+
+.nav-badge {
+  min-width: 18px; height: 18px;
+  border-radius: 9px;
+  background: #e8edf5;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 5px;
+}
+
+.nav-badge.badge-alert {
+  background: #fff0f0;
+  color: var(--geo-red);
+}
+
+.nav-badge:empty { display: none; }
+
+/* Footer */
+.sidebar-footer {
+  border-top: 1px solid var(--sidebar-bdr);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.footer-avatar {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--geo-blue);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+
+.footer-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.2s;
+}
+
+.footer-fullname {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer-divisi {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.btn-logout {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  border: 1px solid #ffd0d4;
+  background: #fff5f5;
+  color: var(--geo-red);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.btn-logout:hover {
+  background: var(--geo-red);
+  color: white;
+  border-color: var(--geo-red);
+}
+
+/* ── Collapsed State ────────────────────────── */
+.sidebar-wrapper.collapsed .brand-text,
+.sidebar-wrapper.collapsed .role-name,
+.sidebar-wrapper.collapsed .nav-label,
+.sidebar-wrapper.collapsed .nav-badge,
+.sidebar-wrapper.collapsed .nav-section-label,
+.sidebar-wrapper.collapsed .footer-info {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-wrapper.collapsed .nav-item {
+  justify-content: center;
+  padding: 9px;
+}
+
+.sidebar-wrapper.collapsed .footer-user {
+  justify-content: center;
+}
+
+.sidebar-wrapper.collapsed .nav-item::before {
+  left: 0;
+}
+
+/* ── Tooltip on Collapsed ───────────────────── */
+.sidebar-wrapper.collapsed .nav-item {
+  position: relative;
+}
+
+.sidebar-wrapper.collapsed .nav-item:hover::after {
+  content: attr(data-page);
+  position: absolute;
+  left: calc(100% + 12px);
+  background: #1a2a3a;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* ── Mobile ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar-wrapper {
+    transform: translateX(-100%);
+    width: var(--sidebar-w) !important;
+  }
+  .sidebar-wrapper.mobile-open {
+    transform: translateX(0);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.3);
+  }
+  .sidebar-wrapper.collapsed { width: var(--sidebar-w) !important; }
+}
+</style>
+
+<script>
+
+function toggleSidebar() {
+  var sidebar = document.getElementById('sidebar');
+  sidebar.classList.toggle('collapsed');
+  localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed') ? 'true' : 'false');
+}
+
+function initSidebar(userSession) {
+  if (!userSession) return;
+
+  var roleLabels = {
+    USER:'Pengusul', TIM_SURVEY:'Tim Survey',
+     SCM:'SCM', GM:'General Manager'
+  };
+  var roleColors = {
+    USER:'#8DC63F', TIM_SURVEY:'#CEDF51',
+     SCM:'#0B50A1', GM:'#000000'
+  };
+
+  var roleLabelEl = document.getElementById('sidebarRoleLabel');
+  if (roleLabelEl) roleLabelEl.textContent = userSession.role;
+
+  var usernameEl = document.getElementById('sidebarUsername');
+  if (usernameEl) usernameEl.textContent = '@' + userSession.username;
+
+  var fullnameEl = document.getElementById('sidebarFullname');
+  if (fullnameEl) fullnameEl.textContent = userSession.nama_lengkap;
+
+  var divisiEl = document.getElementById('sidebarDivisi');
+  if (divisiEl) divisiEl.textContent = userSession.divisi || roleLabels[userSession.role] || '';
+
+  var dot = document.querySelector('.role-dot');
+  if (dot) dot.style.background = roleColors[userSession.role] || '#8DC63F';
+
+  // Avatar initials
+  var names    = userSession.nama_lengkap.split(' ');
+  var initials = names.length > 1 ? names[0][0] + names[names.length-1][0] : names[0].substring(0,2);
+  var avatarEl = document.getElementById('sidebarAvatar');
+  if (avatarEl) avatarEl.textContent = initials.toUpperCase();
+
+  // Show/hide role-gated items
+  var gated = document.querySelectorAll('.nav-role-gate');
+  for (var i = 0; i < gated.length; i++) {
+    var el    = gated[i];
+    var roles = el.dataset.roles ? el.dataset.roles.split(',') : [];
+    el.style.display = (roles.indexOf(userSession.role) !== -1) ? '' : 'none';
+  }
+
+  // Restore collapsed state
+  var isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+  if (isCollapsed) document.getElementById('sidebar').classList.add('collapsed');
+}
+
+function navigateTo(page, el) {
+  var items = document.querySelectorAll('.nav-item');
+  for (var i = 0; i < items.length; i++) items[i].classList.remove('active');
+  if (el) el.classList.add('active');
+  if (window.loadPage) window.loadPage(page);
+}
+
+function setBadge(id, count) {
+  var el = document.getElementById(id);
+  if (el) el.textContent = count > 0 ? (count > 99 ? '99+' : count) : '';
+}
+
+// Expose handleLogout to window so navbar partial can call it
+window.handleLogout = function() {
+  if (window.APP && window.APP.WEB_APP_URL) {
+    google.script.run
+      .withSuccessHandler(function() {
+        sessionStorage.clear();
+        window.top.location.href = window.APP.WEB_APP_URL + '?page=login';
+      })
+      .withFailureHandler(function() {
+        sessionStorage.clear();
+        window.top.location.href = window.APP.WEB_APP_URL + '?page=login';
+      })
+      .handleLogout(window.APP.token || '');
+  } else {
+    sessionStorage.clear();
+    window.top.location.href = window.location.href.split('?')[0] + '?page=login';
+  }
+};
+
+</script>
