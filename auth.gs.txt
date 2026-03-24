@@ -159,15 +159,6 @@ function deleteUser(session, payload) {
   return updateUser(session, payload);
 }
 
-function hashPassword(plain) {
-  var salt  = 'GEODIPA_SLIP_ROUTING_2026';
-  var bytes = Utilities.computeDigest(
-    Utilities.DigestAlgorithm.SHA_256, plain + salt, Utilities.Charset.UTF_8);
-  return bytes.map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
-}
-
-function verifyPassword(plain, hash) { return hashPassword(plain) === hash; }
-
 function requireRole(session, allowedRoles) {
   if (allowedRoles.indexOf(session.role) === -1) {
     throw new Error('Akses ditolak. Role ' + session.role + ' tidak diizinkan.');

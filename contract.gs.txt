@@ -43,11 +43,11 @@ function createContract(session, payload) {
   requireRole(session, [ROLES.SCM]);
   requireFields(payload, ['kode_tender']);
 
-  var kode_tender = payload.kode_tender;
-var nama_vendor = payload.nama_vendor;
-var nilai_kontrak = payload.nilai_kontrak;
-var tanggal_mulai = payload.tanggal_mulai;
-var tanggal_selesai = payload.tanggal_selesai;
+  var kode_tender    = payload.kode_tender;
+  var nama_vendor    = payload.nama_vendor;
+  var nilai_kontrak  = payload.nilai_kontrak;
+  var tanggal_mulai  = payload.tanggal_mulai;
+  var tanggal_selesai = payload.tanggal_selesai;
 
   // Validate tender exists and has PO
   var tender = getRowByField(SHEETS.TENDER, 'kode_tender', kode_tender);
@@ -57,8 +57,15 @@ var tanggal_selesai = payload.tanggal_selesai;
     return { success: false, message: 'Tender belum selesai. Status harus APPROVED untuk membuat kontrak.' };
   }
 
-  var existingContract = sheetToObjects(SHEETS.CONTRACT)
-    .find(function(c) { return c.kode_tender === kode_tender; });
+  // BUG 3 FIX: replace .find() with for loop
+  var allContracts = sheetToObjects(SHEETS.CONTRACT);
+  var existingContract = null;
+  for (var ci = 0; ci < allContracts.length; ci++) {
+    if (allContracts[ci].kode_tender === kode_tender) {
+      existingContract = allContracts[ci];
+      break;
+    }
+  }
   if (existingContract) {
     return { success: false, message: 'Kontrak untuk tender ini sudah ada: ' + existingContract.kode_contract };
   }
@@ -88,11 +95,12 @@ var tanggal_selesai = payload.tanggal_selesai;
 
   _addContractStatusLog(kode, kode_tender, tender.kode_rencana, session, CONTRACT_TAHAP.DRAFTING, 'Kontrak mulai di-draft oleh SCM.', '');
 
+  // BUG 2 FIX: replace shorthand { id } with { id: id }
   return {
     success: true,
     message: 'Kontrak berhasil dibuat. Kode: ' + kode,
     kode_contract: kode,
-    id,
+    id: id
   };
 }
 
@@ -101,11 +109,17 @@ function updateContractStatus(session, payload) {
   requireRole(session, [ROLES.SCM, ROLES.GM]);
 
   var kode_contract = payload.kode_contract;
-var new_status = payload.new_status;
-var catatan = payload.catatan;
+  var new_status    = payload.new_status;
+  var catatan       = payload.catatan;
   requireFields(payload, ['kode_contract', 'new_status']);
 
-  if (!Object.values(CONTRACT_TAHAP).indexOf(new_status) !== -1) {
+  // BUG 4 FIX: replace Object.values() + broken inverted condition with objectValues() + for loop
+  var validStatuses = objectValues(CONTRACT_TAHAP);
+  var statusValid = false;
+  for (var vi = 0; vi < validStatuses.length; vi++) {
+    if (validStatuses[vi] === new_status) { statusValid = true; break; }
+  }
+  if (!statusValid) {
     return { success: false, message: 'Status tidak valid.' };
   }
 
@@ -136,10 +150,10 @@ function uploadDokumenContract(session, payload) {
   requireRole(session, [ROLES.SCM, ROLES.GM]);
 
   var kode_contract = payload.kode_contract;
-var file_base64 = payload.file_base64;
-var file_name = payload.file_name;
-var mime_type = payload.mime_type;
-var doc_type = payload.doc_type;
+  var file_base64   = payload.file_base64;
+  var file_name     = payload.file_name;
+  var mime_type     = payload.mime_type;
+  var doc_type      = payload.doc_type;
   requireFields(payload, ['kode_contract', 'file_base64', 'file_name', 'mime_type', 'doc_type']);
 
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
@@ -157,7 +171,9 @@ var doc_type = payload.doc_type;
   var col = colMap[doc_type];
   if (!col) return { success: false, message: 'doc_type tidak valid. Pilih: draft/review/final' };
 
-  var updates = { [col]: link };
+  // BUG 1 FIX: replace { [col]: link } with dynamic assignment
+  var updates = {};
+  updates[col] = link;
 
   // Auto-advance status
   var tahapMap = {
@@ -171,7 +187,7 @@ var doc_type = payload.doc_type;
   updateRowById(SHEETS.CONTRACT, contract.id, updates);
   _addContractStatusLog(kode_contract, contract.kode_tender, contract.kode_rencana, session, tahapMap[doc_type], 'Dokumen ' + doc_type + ' diupload.', link);
 
-  return { success: true, message: 'Dokumen ' + doc_type + ' berhasil diupload.', link };
+  return { success: true, message: 'Dokumen ' + doc_type + ' berhasil diupload.', link: link };
 }
 
 // -- Get Contract List -----------------------------------------
@@ -205,7 +221,7 @@ function getContractList(session, payload) {
   return {
     success: true,
     data: items,
-    pagination: { page, limit, total, totalPage: Math.ceil(total / limit) }
+    pagination: { page: page, limit: limit, total: total, totalPage: Math.ceil(total / limit) }
   };
 }
 
@@ -224,7 +240,8 @@ function getContractDetail(session, payload) {
   var tender  = getRowByField(SHEETS.TENDER,  'kode_tender',  contract.kode_tender);
   var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', contract.kode_rencana);
 
-  return { success: true, data: contract, status_logs: logs, tender, rencana };
+  // BUG FIX: replace shorthand { tender, rencana } with explicit properties
+  return { success: true, data: contract, status_logs: logs, tender: tender, rencana: rencana };
 }
 
 // -- Internal Status Log ---------------------------------------
