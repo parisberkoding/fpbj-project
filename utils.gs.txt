@@ -6,6 +6,7 @@ function generateId() {
   return Utilities.getUuid();
 }
 
+// BUG 6 FIX: only ONE generateToken definition (duplicate at bottom removed)
 function generateToken() {
   var rand = Math.random().toString(36).substring(2);
   var ts   = Date.now().toString(36);
@@ -160,6 +161,7 @@ function generateKodeDelivery() {
 
 // ============================================================
 // PASSWORD
+// BUG 7 FIX: hashPassword and verifyPassword defined ONLY here (removed from auth.gs)
 // ============================================================
 
 function hashPassword(plain) {
@@ -196,75 +198,234 @@ function computeDocStatus(currentStatus, viewCount, viewDurationSec) {
 }
 
 // ============================================================
-// GENERATE TOKEN
-// ============================================================
-
-function generateToken() {
-  var rand = Math.random().toString(36).substring(2);
-  var ts   = Date.now().toString(36);
-  return 'tok_' + ts + '_' + rand;
-}
-
-// ============================================================
 // DASHBOARD DATA - per role
+// BUG 8 FIX: complete implementation with Contract & Delivery counts for all roles
+// Pure ES5 - all counting done with for loops
 // ============================================================
 
 function getDashboardData(session) {
-  var role      = session.role;
-  var rencanaAll = sheetToObjects(SHEETS.RENCANA);
-  var tenderAll  = sheetToObjects(SHEETS.TENDER);
-  var summary    = {};
+  var role        = session.role;
+  var rencanaAll  = sheetToObjects(SHEETS.RENCANA);
+  var tenderAll   = sheetToObjects(SHEETS.TENDER);
+  var contractAll = sheetToObjects(SHEETS.CONTRACT);
+  var deliveryAll = sheetToObjects(SHEETS.DELIVERY);
+  var summary     = {};
 
   if (role === ROLES.USER) {
-    var mine = rencanaAll.filter(function(r) { return r.kode_user_pengusul === session.kode_user; });
+    // Filter rencana belonging to this user
+    var mine = [];
+    for (var i = 0; i < rencanaAll.length; i++) {
+      if (rencanaAll[i].kode_user_pengusul === session.kode_user) {
+        mine.push(rencanaAll[i]);
+      }
+    }
+
+    // Count by status
+    var draft = 0, pending = 0, approved = 0, revised = 0, rejected = 0;
+    var myKodeRencana = {};
+    for (var i = 0; i < mine.length; i++) {
+      var r = mine[i];
+      myKodeRencana[r.kode_rencana] = true;
+      if (r.status === DOC_STATUS.DRAFT)     draft++;
+      else if (r.status === DOC_STATUS.PENDING)   pending++;
+      else if (r.status === DOC_STATUS.APPROVED)  approved++;
+      else if (r.status === DOC_STATUS.REVISED)   revised++;
+      else if (r.status === DOC_STATUS.REJECTED)  rejected++;
+    }
+
+    // Count tender linked to user's rencana
+    var myKodeTender = {};
+    var total_tender = 0;
+    for (var i = 0; i < tenderAll.length; i++) {
+      if (myKodeRencana[tenderAll[i].kode_rencana]) {
+        myKodeTender[tenderAll[i].kode_tender] = true;
+        total_tender++;
+      }
+    }
+
+    // Count contract linked to user's tender
+    var total_contract = 0;
+    for (var i = 0; i < contractAll.length; i++) {
+      if (myKodeTender[contractAll[i].kode_tender]) {
+        total_contract++;
+      }
+    }
+
+    // Count delivery linked to user's rencana
+    var total_delivery = 0, delivery_active = 0, delivery_done = 0;
+    for (var i = 0; i < deliveryAll.length; i++) {
+      if (myKodeRencana[deliveryAll[i].kode_rencana]) {
+        total_delivery++;
+        if (deliveryAll[i].status === DELIVERY_TAHAP.SELESAI) delivery_done++;
+        else delivery_active++;
+      }
+    }
+
+    // Last 5 rencana reversed (mine.slice(-5).reverse())
+    var sliceStart = mine.length - 5;
+    if (sliceStart < 0) sliceStart = 0;
+    var latestSlice = [];
+    for (var i = sliceStart; i < mine.length; i++) latestSlice.push(mine[i]);
+    var latest = [];
+    for (var i = latestSlice.length - 1; i >= 0; i--) latest.push(latestSlice[i]);
+
     summary = {
-      total_rencana: mine.length,
-      pending:  mine.filter(function(r) { return r.status === DOC_STATUS.PENDING; }).length,
-      approved: mine.filter(function(r) { return r.status === DOC_STATUS.APPROVED; }).length,
-      revised:  mine.filter(function(r) { return r.status === DOC_STATUS.REVISED; }).length,
-      rejected: mine.filter(function(r) { return r.status === DOC_STATUS.REJECTED; }).length,
-      latest: mine.slice(-5).reverse()
+      total_rencana:   mine.length,
+      draft:           draft,
+      pending:         pending,
+      approved:        approved,
+      revised:         revised,
+      rejected:        rejected,
+      total_tender:    total_tender,
+      total_contract:  total_contract,
+      total_delivery:  total_delivery,
+      delivery_active: delivery_active,
+      delivery_done:   delivery_done,
+      latest:          latest
     };
 
   } else if (role === ROLES.TIM_SURVEY) {
-    var needReview = rencanaAll.filter(function(r) {
-      return !r.survey_approval || r.survey_approval === '' || r.survey_approval === DOC_STATUS.PENDING;
-    });
+    var need_review = 0, already_reviewed = 0;
+    var latest_pending = [];
+    for (var i = 0; i < rencanaAll.length; i++) {
+      var r = rencanaAll[i];
+      if (!r.survey_approval || r.survey_approval === '' || r.survey_approval === DOC_STATUS.PENDING) {
+        need_review++;
+        if (latest_pending.length < 5) latest_pending.push(r);
+      }
+      if (r.survey_approval === DOC_STATUS.APPROVED) already_reviewed++;
+    }
+
     summary = {
-      total_rencana:     rencanaAll.length,
-      need_review:       needReview.length,
-      already_reviewed:  rencanaAll.filter(function(r) { return r.survey_approval === DOC_STATUS.APPROVED; }).length,
-      latest_pending:    needReview.slice(0, 5)
+      total_rencana:    rencanaAll.length,
+      need_review:      need_review,
+      already_reviewed: already_reviewed,
+      latest_pending:   latest_pending
     };
 
   } else if (role === ROLES.SCM) {
-    var myTender = tenderAll.filter(function(t) { return t.kode_user_scm === session.kode_user; });
+    // Count approved rencana
+    var total_rencana_approved = 0;
+    for (var i = 0; i < rencanaAll.length; i++) {
+      if (rencanaAll[i].status === DOC_STATUS.APPROVED) total_rencana_approved++;
+    }
+
+    // Filter tender by this SCM user
+    var myTender = [];
+    for (var i = 0; i < tenderAll.length; i++) {
+      if (tenderAll[i].kode_user_scm === session.kode_user) myTender.push(tenderAll[i]);
+    }
+
+    var tender_active = 0, tender_done = 0, need_action = 0;
+    for (var i = 0; i < myTender.length; i++) {
+      var t = myTender[i];
+      if (t.status_dokumen === DOC_STATUS.APPROVED) tender_done++;
+      else tender_active++;
+      if (t.status_tahap === 'DRAFTING_RKS_HPS' || t.status_tahap === 'KLARIFIKASI_NEGOSIASI') need_action++;
+    }
+
+    // Filter contract by this SCM user
+    var myContract = [];
+    for (var i = 0; i < contractAll.length; i++) {
+      if (contractAll[i].kode_user_scm === session.kode_user) myContract.push(contractAll[i]);
+    }
+
+    var contract_active = 0, contract_done = 0;
+    for (var i = 0; i < myContract.length; i++) {
+      if (myContract[i].status === CONTRACT_TAHAP.SELESAI) contract_done++;
+      else contract_active++;
+    }
+
+    // Filter delivery by this SCM user
+    var myDelivery = [];
+    for (var i = 0; i < deliveryAll.length; i++) {
+      if (deliveryAll[i].kode_user === session.kode_user) myDelivery.push(deliveryAll[i]);
+    }
+
+    var delivery_active = 0, delivery_done = 0;
+    for (var i = 0; i < myDelivery.length; i++) {
+      if (myDelivery[i].status === DELIVERY_TAHAP.SELESAI) delivery_done++;
+      else delivery_active++;
+    }
+
+    // Last 5 tender reversed
+    var tSliceStart = myTender.length - 5;
+    if (tSliceStart < 0) tSliceStart = 0;
+    var tLatestSlice = [];
+    for (var i = tSliceStart; i < myTender.length; i++) tLatestSlice.push(myTender[i]);
+    var latest = [];
+    for (var i = tLatestSlice.length - 1; i >= 0; i--) latest.push(tLatestSlice[i]);
+
     summary = {
-      total_rencana:   rencanaAll.filter(function(r) { return r.status === DOC_STATUS.APPROVED; }).length,
-      total_tender:    myTender.length,
-      tender_active:   myTender.filter(function(t) { return t.status_dokumen !== DOC_STATUS.APPROVED && t.status_dokumen !== DOC_STATUS.REJECTED; }).length,
-      tender_done:     myTender.filter(function(t) { return t.status_dokumen === DOC_STATUS.APPROVED; }).length,
-      need_action:     myTender.filter(function(t) {
-        return t.status_tahap === 'DRAFTING_RKS_HPS' || t.status_tahap === 'KLARIFIKASI_NEGOSIASI';
-      }).length,
-      latest: myTender.slice(-5).reverse()
+      total_rencana_approved: total_rencana_approved,
+      total_tender:           myTender.length,
+      tender_active:          tender_active,
+      tender_done:            tender_done,
+      need_action:            need_action,
+      total_contract:         myContract.length,
+      contract_active:        contract_active,
+      contract_done:          contract_done,
+      total_delivery:         myDelivery.length,
+      delivery_active:        delivery_active,
+      delivery_done:          delivery_done,
+      latest:                 latest
     };
 
   } else if (role === ROLES.GM) {
-    var pendingRencana = rencanaAll.filter(function(r) {
-      return !r.gm_approval || r.gm_approval === '' || r.gm_approval === DOC_STATUS.PENDING;
-    });
-    var pendingTender = tenderAll.filter(function(t) {
-      return t.status_tahap === 'APPROVAL_RKS' || t.status_tahap === 'PERSETUJUAN_BAHP' || t.status_tahap === 'TTD_SKPP';
-    });
-    var latestNeedAction = pendingRencana.slice(0,3).concat(pendingTender.slice(0,3));
+    // Rencana counts
+    var pending_rencana_approval = 0, approved_rencana = 0;
+    var pendingRencanaList = [];
+    for (var i = 0; i < rencanaAll.length; i++) {
+      var r = rencanaAll[i];
+      if (!r.gm_approval || r.gm_approval === '' || r.gm_approval === DOC_STATUS.PENDING) {
+        pending_rencana_approval++;
+        if (pendingRencanaList.length < 3) pendingRencanaList.push(r);
+      }
+      if (r.gm_approval === DOC_STATUS.APPROVED) approved_rencana++;
+    }
+
+    // Tender pending approval
+    var tender_pending_approval = 0;
+    var pendingTenderList = [];
+    for (var i = 0; i < tenderAll.length; i++) {
+      var t = tenderAll[i];
+      if (t.status_tahap === 'APPROVAL_RKS' || t.status_tahap === 'PERSETUJUAN_BAHP' || t.status_tahap === 'TTD_SKPP') {
+        tender_pending_approval++;
+        if (pendingTenderList.length < 3) pendingTenderList.push(t);
+      }
+    }
+
+    // Contract pending TTD (status is FINAL or TTD_GM)
+    var contract_pending_ttd = 0;
+    for (var i = 0; i < contractAll.length; i++) {
+      var c = contractAll[i];
+      if (c.status === CONTRACT_TAHAP.FINAL || c.status === CONTRACT_TAHAP.TTD_GM) {
+        contract_pending_ttd++;
+      }
+    }
+
+    // Delivery pending verifikasi
+    var delivery_pending_verifikasi = 0;
+    for (var i = 0; i < deliveryAll.length; i++) {
+      if (deliveryAll[i].status === DELIVERY_TAHAP.VERIFIKASI) delivery_pending_verifikasi++;
+    }
+
+    // latest_need_action: top 3 pending rencana + top 3 pending tender
+    var latest_need_action = [];
+    for (var i = 0; i < pendingRencanaList.length; i++) latest_need_action.push(pendingRencanaList[i]);
+    for (var i = 0; i < pendingTenderList.length; i++) latest_need_action.push(pendingTenderList[i]);
+
     summary = {
-      total_rencana:           rencanaAll.length,
-      pending_approval:        pendingRencana.length,
-      approved_rencana:        rencanaAll.filter(function(r) { return r.gm_approval === DOC_STATUS.APPROVED; }).length,
-      total_tender:            tenderAll.length,
-      tender_pending_approval: pendingTender.length,
-      latest_need_action:      latestNeedAction
+      total_rencana:               rencanaAll.length,
+      pending_rencana_approval:    pending_rencana_approval,
+      approved_rencana:            approved_rencana,
+      total_tender:                tenderAll.length,
+      tender_pending_approval:     tender_pending_approval,
+      total_contract:              contractAll.length,
+      contract_pending_ttd:        contract_pending_ttd,
+      total_delivery:              deliveryAll.length,
+      delivery_pending_verifikasi: delivery_pending_verifikasi,
+      latest_need_action:          latest_need_action
     };
   }
 

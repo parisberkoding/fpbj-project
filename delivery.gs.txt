@@ -27,10 +27,10 @@ function createDelivery(session, payload) {
   }
   if (!payload.kode_contract) return { success: false, message: 'kode_contract wajib.' };
 
-  var kode_contract = payload.kode_contract;
-var kode_sagr = payload.kode_sagr;
-var tanggal_delivery = payload.tanggal_delivery;
-var catatan = payload.catatan;
+  var kode_contract    = payload.kode_contract;
+  var kode_sagr        = payload.kode_sagr;
+  var tanggal_delivery = payload.tanggal_delivery;
+  var catatan          = payload.catatan;
 
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
   if (!contract) return { success: false, message: 'Kontrak tidak ditemukan.' };
@@ -73,12 +73,18 @@ function updateDeliveryStatus(session, payload) {
   }
 
   var kode_delivery = payload.kode_delivery;
-var new_status = payload.new_status;
-var catatan = payload.catatan;
-var kode_sagr = payload.kode_sagr;
+  var new_status    = payload.new_status;
+  var catatan       = payload.catatan;
+  var kode_sagr     = payload.kode_sagr;
   if (!payload.kode_delivery || !payload.new_status) return { success: false, message: 'kode_delivery dan new_status wajib.' };
 
-  if (!Object.keys(DELIVERY_TAHAP).some(function(k) { return DELIVERY_TAHAP[k] === new_status; })) {
+  // BUG 5 FIX: replace Object.keys().some() with static array + for loop
+  var validTahap = false;
+  var tahapKeys = ['SA_GR', 'INVOICE', 'VERIFIKASI', 'SELESAI'];
+  for (var vi = 0; vi < tahapKeys.length; vi++) {
+    if (DELIVERY_TAHAP[tahapKeys[vi]] === new_status) { validTahap = true; break; }
+  }
+  if (!validTahap) {
     return { success: false, message: 'Status tidak valid.' };
   }
 
@@ -86,7 +92,7 @@ var kode_sagr = payload.kode_sagr;
   if (!delivery) return { success: false, message: 'Delivery tidak ditemukan.' };
 
   var updates = { status: new_status };
-  if (catatan)   updates.catatan  = catatan;
+  if (catatan)   updates.catatan   = catatan;
   if (kode_sagr) updates.kode_sagr = kode_sagr;
   if (new_status === DELIVERY_TAHAP.SELESAI) updates.updated_at = now();
 
@@ -103,10 +109,10 @@ function uploadDokumenDelivery(session, payload) {
   }
 
   var kode_delivery = payload.kode_delivery;
-var file_base64 = payload.file_base64;
-var file_name = payload.file_name;
-var mime_type = payload.mime_type;
-var doc_type = payload.doc_type;
+  var file_base64   = payload.file_base64;
+  var file_name     = payload.file_name;
+  var mime_type     = payload.mime_type;
+  var doc_type      = payload.doc_type;
   if (!payload.kode_delivery || !payload.file_base64 || !payload.file_name || !payload.mime_type || !payload.doc_type) {
     return { success: false, message: 'Field wajib tidak lengkap.' };
   }
