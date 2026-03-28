@@ -177,18 +177,19 @@ function approveRencana(session, payload) {
   if (role !== ROLES.GM && role !== ROLES.TIM_SURVEY && role !== ROLES.ADMIN) {
     return { success: false, message: 'Hanya GM, Tim Survey, atau ADMIN yang bisa melakukan approval.' };
   }
-  if (!payload.kode_rencana || !payload.action) {
-    return { success: false, message: 'kode_rencana dan action wajib.' };
+  var decision = payload.decision || payload.action;
+  if (!payload.kode_rencana || !decision) {
+    return { success: false, message: 'kode_rencana dan decision wajib.' };
   }
-  if (['approve','reject','revise'].indexOf(payload.action) === -1) {
-    return { success: false, message: 'Action harus: approve / reject / revise.' };
+  if (['approve','reject','revise'].indexOf(decision) === -1) {
+    return { success: false, message: 'Decision harus: approve / reject / revise.' };
   }
 
   var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', payload.kode_rencana);
   if (!rencana) return { success: false, message: 'Rencana tidak ditemukan.' };
 
   var statusMap = { approve: DOC_STATUS.APPROVED, reject: DOC_STATUS.REJECTED, revise: DOC_STATUS.REVISED };
-  var newStatus = statusMap[payload.action];
+  var newStatus = statusMap[decision];
   var updates   = {};
 
   // ADMIN approval counts as both GM and Survey approval
@@ -231,9 +232,9 @@ function approveRencana(session, payload) {
   _addRencanaLog(payload.kode_rencana, session, newStatus, payload.catatan || '', '');
 
   var allApproved = (gmOk && surveyOk);
-  var msg = payload.action === 'approve'
+  var msg = decision === 'approve'
     ? 'Disetujui oleh ' + role + (allApproved ? '. Rencana siap masuk Tender.' : '. Menunggu approval pihak lain.')
-    : payload.action === 'reject' ? 'Ditolak oleh ' + role + '.'
+    : decision === 'reject' ? 'Ditolak oleh ' + role + '.'
     : 'Dikembalikan untuk revisi oleh ' + role + '.';
 
   return { success: true, message: msg, all_approved: allApproved };

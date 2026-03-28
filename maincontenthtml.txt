@@ -589,7 +589,7 @@ function _openRencanaApproval(kode, judul) {
 }
 
 function _submitRencanaApproval(kode) {
-  api('approveRencana', {kode_rencana:kode, action:document.getElementById('approvalAction').value, catatan:document.getElementById('approvalNote').value})
+  api('approveRencana', {kode_rencana:kode, decision:document.getElementById('approvalAction').value, catatan:document.getElementById('approvalNote').value})
     .then(function(res) { closeModal(); showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('rencana-list'); });
 }
 
@@ -854,7 +854,7 @@ function _openTenderApprovalModal(kodeTender, statusTahap) {
 }
 
 function _submitTenderApproval(kodeTender, docType) {
-  api('approveTender', {kode_tender:kodeTender, action:document.getElementById('tApAction').value, doc_type:docType, catatan:document.getElementById('tApNote').value})
+  api('approveTender', {kode_tender:kodeTender, decision:document.getElementById('tApAction').value, doc_type:docType, catatan:document.getElementById('tApNote').value})
     .then(function(res) { closeModal(); showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('tender-list'); });
 }
 
@@ -988,7 +988,7 @@ function renderApprovalTender() {
 }
 
 function _quickApprove(kodeTender, docType) {
-  api('approveTender', {kode_tender:kodeTender, action:'approve', doc_type:docType, catatan:''})
+  api('approveTender', {kode_tender:kodeTender, decision:'approve', doc_type:docType, catatan:''})
     .then(function(res) { showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('approval-tender'); });
 }
 
