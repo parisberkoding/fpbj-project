@@ -1,5 +1,5 @@
 /**
- * auth.gs - Authentication & User Management
+ * auth.gs - Authentication, User Profile & User Management
  */
 
 function _handleLogin(payload) {
@@ -38,7 +38,8 @@ function _handleLogin(payload) {
     user: {
       id: userRow[H.id], kode_user: userRow[H.kode_user],
       nama_lengkap: userRow[H.nama_lengkap], username: userRow[H.username],
-      role: userRow[H.role], divisi: userRow[H.divisi] || '', email: userRow[H.email] || ''
+      role: userRow[H.role], divisi: userRow[H.divisi] || '', email: userRow[H.email] || '',
+      no_hp: userRow[H.no_hp] || ''
     }
   };
 }
@@ -53,19 +54,9 @@ function _handleLogout(token) {
   return { success: true, message: 'Berhasil logout.' };
 }
 
-function verifySession(token) {
-  if (!token) return null;
-  var sheet = getSheet(SHEETS.SESSIONS);
-  var data  = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i];
-    if (row[0] !== token) continue;
-    if (!row[8] || new Date() > new Date(row[7])) return null;
-    return { user_id: row[1], kode_user: row[2], username: row[3],
-             role: row[4], nama_lengkap: row[5], token: token };
-  }
-  return null;
-}
+// ============================================================
+// CHANGE PASSWORD
+// ============================================================
 
 function changePassword(session, payload) {
   if (!payload.old_password || !payload.new_password) {
@@ -90,8 +81,58 @@ function changePassword(session, payload) {
   return { success: false, message: 'User tidak ditemukan.' };
 }
 
+// ============================================================
+// USER PROFILE
+// ============================================================
+
+function getUserProfile(session) {
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === session.user_id) {
+      return {
+        success: true,
+        data: {
+          id: data[i][H.id],
+          kode_user: data[i][H.kode_user],
+          nama_lengkap: data[i][H.nama_lengkap],
+          username: data[i][H.username],
+          role: data[i][H.role],
+          email: data[i][H.email] || '',
+          no_hp: data[i][H.no_hp] || '',
+          divisi: data[i][H.divisi] || '',
+          created_at: data[i][H.created_at]
+        }
+      };
+    }
+  }
+  return { success: false, message: 'User tidak ditemukan.' };
+}
+
+function updateUserProfile(session, payload) {
+  var sheet = getSheet(SHEETS.USERS);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === session.user_id) {
+      if (payload.nama_lengkap !== undefined) sheet.getRange(i+1,H.nama_lengkap+1).setValue(payload.nama_lengkap);
+      if (payload.email !== undefined)        sheet.getRange(i+1,H.email+1).setValue(payload.email);
+      if (payload.no_hp !== undefined)        sheet.getRange(i+1,H.no_hp+1).setValue(payload.no_hp);
+      if (payload.divisi !== undefined)       sheet.getRange(i+1,H.divisi+1).setValue(payload.divisi);
+      sheet.getRange(i+1, H.updated_at+1).setValue(now());
+      return { success: true, message: 'Profil berhasil diupdate.' };
+    }
+  }
+  return { success: false, message: 'User tidak ditemukan.' };
+}
+
+// ============================================================
+// USER MANAGEMENT - GM & ADMIN
+// ============================================================
+
 function getUsers(session) {
-  requireRole(session, [ROLES.GM]);
+  requireRole(session, [ROLES.GM, ROLES.ADMIN]);
   var objects = sheetToObjects(SHEETS.USERS);
   var result  = [];
   for (var i = 0; i < objects.length; i++) {
@@ -104,13 +145,17 @@ function getUsers(session) {
 }
 
 function createUser(session, payload) {
-  requireRole(session, [ROLES.GM]);
-  var validRoles = [ROLES.USER, ROLES.TIM_SURVEY, ROLES.SCM, ROLES.GM];
+  requireRole(session, [ROLES.GM, ROLES.ADMIN]);
+  var validRoles = [ROLES.USER, ROLES.TIM_SURVEY, ROLES.SCM, ROLES.GM, ROLES.ADMIN];
   if (!payload.nama_lengkap || !payload.username || !payload.password || !payload.role) {
     return { success: false, message: 'nama_lengkap, username, password, role wajib.' };
   }
   if (validRoles.indexOf(payload.role) === -1) {
     return { success: false, message: 'Role tidak valid.' };
+  }
+  // Only ADMIN can create another ADMIN or GM
+  if ((payload.role === ROLES.ADMIN || payload.role === ROLES.GM) && session.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya ADMIN yang bisa membuat user ADMIN/GM.' };
   }
   var sheet = getSheet(SHEETS.USERS);
   var data  = sheet.getDataRange().getValues();
@@ -120,7 +165,7 @@ function createUser(session, payload) {
       return { success: false, message: 'Username sudah digunakan.' };
     }
   }
-  var prefixMap = { USER: 'USR', TIM_SURVEY: 'SRV', SCM: 'SCM', GM: 'GM' };
+  var prefixMap = { ADMIN: 'ADM', USER: 'USR', TIM_SURVEY: 'SRV', SCM: 'SCM', GM: 'GM' };
   var kode = generateKode(prefixMap[payload.role] || 'USR', SHEETS.USERS, 'kode_user');
   var id   = generateId();
   sheet.appendRow([
@@ -133,7 +178,7 @@ function createUser(session, payload) {
 }
 
 function updateUser(session, payload) {
-  requireRole(session, [ROLES.GM]);
+  requireRole(session, [ROLES.GM, ROLES.ADMIN]);
   if (!payload.id) return { success: false, message: 'id wajib.' };
   var sheet = getSheet(SHEETS.USERS);
   var data  = sheet.getDataRange().getValues();
@@ -146,6 +191,7 @@ function updateUser(session, payload) {
       if (payload.no_hp !== undefined)        sheet.getRange(i+1,H.no_hp+1).setValue(payload.no_hp);
       if (payload.divisi !== undefined)       sheet.getRange(i+1,H.divisi+1).setValue(payload.divisi);
       if (payload.is_active !== undefined)    sheet.getRange(i+1,H.is_active+1).setValue(payload.is_active);
+      if (payload.password)                   sheet.getRange(i+1,H.password_hash+1).setValue(hashPassword(payload.password));
       sheet.getRange(i+1, H.updated_at+1).setValue(now());
       return { success: true, message: 'User diupdate.' };
     }
@@ -154,12 +200,14 @@ function updateUser(session, payload) {
 }
 
 function deleteUser(session, payload) {
-  requireRole(session, [ROLES.GM]);
+  requireRole(session, [ROLES.GM, ROLES.ADMIN]);
   payload.is_active = false;
   return updateUser(session, payload);
 }
 
 function requireRole(session, allowedRoles) {
+  // ADMIN always has access
+  if (session.role === ROLES.ADMIN) return;
   if (allowedRoles.indexOf(session.role) === -1) {
     throw new Error('Akses ditolak. Role ' + session.role + ' tidak diizinkan.');
   }
