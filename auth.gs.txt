@@ -15,7 +15,8 @@ function _handleLogin(payload) {
   var rows    = data.slice(1);
   var userRow = null;
   for (var i = 0; i < rows.length; i++) {
-    if (rows[i][H.username] === username.trim() && rows[i][H.is_active] === true) {
+    var active = rows[i][H.is_active];
+    if (rows[i][H.username] === username.trim() && (active === true || String(active).toLowerCase() === 'true')) {
       userRow = rows[i]; break;
     }
   }

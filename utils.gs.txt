@@ -44,7 +44,20 @@ function arrayToIndex(headers) {
 function rowToObject(row, H) {
   var obj = {};
   for (var key in H) {
-    if (H.hasOwnProperty(key)) obj[key] = row[H[key]];
+    if (H.hasOwnProperty(key)) {
+      var val = row[H[key]];
+      // Convert Date objects to ISO strings for google.script.run compatibility
+      // GAS google.script.run can silently fail when returning Date objects
+      if (val instanceof Date) {
+        try {
+          obj[key] = Utilities.formatDate(val, 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss');
+        } catch(e) {
+          obj[key] = String(val);
+        }
+      } else {
+        obj[key] = val;
+      }
+    }
   }
   return obj;
 }
@@ -254,7 +267,8 @@ function getDashboardData(session) {
     var usersAll = sheetToObjects(SHEETS.USERS);
     var activeUsers = 0;
     for (var i = 0; i < usersAll.length; i++) {
-      if (usersAll[i].is_active === true) activeUsers++;
+      var ua = usersAll[i].is_active;
+      if (ua === true || String(ua).toLowerCase() === 'true') activeUsers++;
     }
 
     // Latest 5 rencana
