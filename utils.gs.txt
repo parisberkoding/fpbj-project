@@ -6,7 +6,6 @@ function generateId() {
   return Utilities.getUuid();
 }
 
-// BUG 6 FIX: only ONE generateToken definition (duplicate at bottom removed)
 function generateToken() {
   var rand = Math.random().toString(36).substring(2);
   var ts   = Date.now().toString(36);
@@ -89,6 +88,19 @@ function updateRowById(sheetName, id, updates) {
   return false;
 }
 
+function deleteRowById(sheetName, id) {
+  var sheet = getSheet(sheetName);
+  var data  = sheet.getDataRange().getValues();
+  var H     = arrayToIndex(data[0]);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][H.id] === id) {
+      sheet.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
+}
+
 function uploadFileToDrive(base64Data, mimeType, filename, folderId) {
   var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, filename);
   var file;
@@ -138,7 +150,7 @@ function writeAuditLog(session, action, payload) {
 // ============================================================
 
 function generateKodeUser(role) {
-  var prefixMap = { USER:'USR', TIM_SURVEY:'SRV', SCM:'SCM', GM:'GM' };
+  var prefixMap = { ADMIN:'ADM', USER:'USR', TIM_SURVEY:'SRV', SCM:'SCM', GM:'GM' };
   var prefix = prefixMap[role] || 'USR';
   return generateKode(prefix, SHEETS.USERS, 'kode_user');
 }
@@ -161,7 +173,6 @@ function generateKodeDelivery() {
 
 // ============================================================
 // PASSWORD
-// BUG 7 FIX: hashPassword and verifyPassword defined ONLY here (removed from auth.gs)
 // ============================================================
 
 function hashPassword(plain) {
@@ -199,8 +210,6 @@ function computeDocStatus(currentStatus, viewCount, viewDurationSec) {
 
 // ============================================================
 // DASHBOARD DATA - per role
-// BUG 8 FIX: complete implementation with Contract & Delivery counts for all roles
-// Pure ES5 - all counting done with for loops
 // ============================================================
 
 function getDashboardData(session) {
@@ -211,29 +220,77 @@ function getDashboardData(session) {
   var deliveryAll = sheetToObjects(SHEETS.DELIVERY);
   var summary     = {};
 
-  if (role === ROLES.USER) {
-    // Filter rencana belonging to this user
-    var mine = [];
+  if (role === ROLES.ADMIN) {
+    // ADMIN sees everything - full overview
+    var rDraft = 0, rPending = 0, rApproved = 0, rRevised = 0, rRejected = 0;
     for (var i = 0; i < rencanaAll.length; i++) {
-      if (rencanaAll[i].kode_user_pengusul === session.kode_user) {
-        mine.push(rencanaAll[i]);
-      }
+      var st = rencanaAll[i].status;
+      if (st === DOC_STATUS.DRAFT) rDraft++;
+      else if (st === DOC_STATUS.PENDING) rPending++;
+      else if (st === DOC_STATUS.APPROVED) rApproved++;
+      else if (st === DOC_STATUS.REVISED) rRevised++;
+      else if (st === DOC_STATUS.REJECTED) rRejected++;
     }
 
-    // Count by status
+    var tActive = 0, tDone = 0;
+    for (var i = 0; i < tenderAll.length; i++) {
+      if (tenderAll[i].status_tahap === 'SELESAI') tDone++;
+      else tActive++;
+    }
+
+    var cActive = 0, cDone = 0;
+    for (var i = 0; i < contractAll.length; i++) {
+      if (contractAll[i].status === 'SELESAI') cDone++;
+      else cActive++;
+    }
+
+    var dActive = 0, dDone = 0;
+    for (var i = 0; i < deliveryAll.length; i++) {
+      if (deliveryAll[i].status === 'SELESAI') dDone++;
+      else dActive++;
+    }
+
+    // Get user count
+    var usersAll = sheetToObjects(SHEETS.USERS);
+    var activeUsers = 0;
+    for (var i = 0; i < usersAll.length; i++) {
+      if (usersAll[i].is_active === true) activeUsers++;
+    }
+
+    // Latest 5 rencana
+    var latestSlice = rencanaAll.length > 5 ? rencanaAll.slice(rencanaAll.length - 5) : rencanaAll.slice(0);
+    var latest = [];
+    for (var i = latestSlice.length - 1; i >= 0; i--) latest.push(latestSlice[i]);
+
+    summary = {
+      total_rencana: rencanaAll.length,
+      draft: rDraft, pending: rPending, approved: rApproved,
+      revised: rRevised, rejected: rRejected,
+      total_tender: tenderAll.length, tender_active: tActive, tender_done: tDone,
+      total_contract: contractAll.length, contract_active: cActive, contract_done: cDone,
+      total_delivery: deliveryAll.length, delivery_active: dActive, delivery_done: dDone,
+      total_users: usersAll.length, active_users: activeUsers,
+      latest: latest
+    };
+
+  } else if (role === ROLES.USER) {
+    var mine = [];
+    for (var i = 0; i < rencanaAll.length; i++) {
+      if (rencanaAll[i].kode_user_pengusul === session.kode_user) mine.push(rencanaAll[i]);
+    }
+
     var draft = 0, pending = 0, approved = 0, revised = 0, rejected = 0;
     var myKodeRencana = {};
     for (var i = 0; i < mine.length; i++) {
       var r = mine[i];
       myKodeRencana[r.kode_rencana] = true;
-      if (r.status === DOC_STATUS.DRAFT)     draft++;
-      else if (r.status === DOC_STATUS.PENDING)   pending++;
-      else if (r.status === DOC_STATUS.APPROVED)  approved++;
-      else if (r.status === DOC_STATUS.REVISED)   revised++;
-      else if (r.status === DOC_STATUS.REJECTED)  rejected++;
+      if (r.status === DOC_STATUS.DRAFT) draft++;
+      else if (r.status === DOC_STATUS.PENDING) pending++;
+      else if (r.status === DOC_STATUS.APPROVED) approved++;
+      else if (r.status === DOC_STATUS.REVISED) revised++;
+      else if (r.status === DOC_STATUS.REJECTED) rejected++;
     }
 
-    // Count tender linked to user's rencana
     var myKodeTender = {};
     var total_tender = 0;
     for (var i = 0; i < tenderAll.length; i++) {
@@ -243,25 +300,20 @@ function getDashboardData(session) {
       }
     }
 
-    // Count contract linked to user's tender
     var total_contract = 0;
     for (var i = 0; i < contractAll.length; i++) {
-      if (myKodeTender[contractAll[i].kode_tender]) {
-        total_contract++;
-      }
+      if (myKodeTender[contractAll[i].kode_tender]) total_contract++;
     }
 
-    // Count delivery linked to user's rencana
     var total_delivery = 0, delivery_active = 0, delivery_done = 0;
     for (var i = 0; i < deliveryAll.length; i++) {
       if (myKodeRencana[deliveryAll[i].kode_rencana]) {
         total_delivery++;
-        if (deliveryAll[i].status === DELIVERY_TAHAP.SELESAI) delivery_done++;
+        if (deliveryAll[i].status === 'SELESAI') delivery_done++;
         else delivery_active++;
       }
     }
 
-    // Last 5 rencana reversed (mine.slice(-5).reverse())
     var sliceStart = mine.length - 5;
     if (sliceStart < 0) sliceStart = 0;
     var latestSlice = [];
@@ -270,18 +322,11 @@ function getDashboardData(session) {
     for (var i = latestSlice.length - 1; i >= 0; i--) latest.push(latestSlice[i]);
 
     summary = {
-      total_rencana:   mine.length,
-      draft:           draft,
-      pending:         pending,
-      approved:        approved,
-      revised:         revised,
-      rejected:        rejected,
-      total_tender:    total_tender,
-      total_contract:  total_contract,
-      total_delivery:  total_delivery,
-      delivery_active: delivery_active,
-      delivery_done:   delivery_done,
-      latest:          latest
+      total_rencana: mine.length, draft: draft, pending: pending,
+      approved: approved, revised: revised, rejected: rejected,
+      total_tender: total_tender, total_contract: total_contract,
+      total_delivery: total_delivery, delivery_active: delivery_active,
+      delivery_done: delivery_done, latest: latest
     };
 
   } else if (role === ROLES.TIM_SURVEY) {
@@ -297,20 +342,16 @@ function getDashboardData(session) {
     }
 
     summary = {
-      total_rencana:    rencanaAll.length,
-      need_review:      need_review,
-      already_reviewed: already_reviewed,
-      latest_pending:   latest_pending
+      total_rencana: rencanaAll.length, need_review: need_review,
+      already_reviewed: already_reviewed, latest_pending: latest_pending
     };
 
   } else if (role === ROLES.SCM) {
-    // Count approved rencana
     var total_rencana_approved = 0;
     for (var i = 0; i < rencanaAll.length; i++) {
       if (rencanaAll[i].status === DOC_STATUS.APPROVED) total_rencana_approved++;
     }
 
-    // Filter tender by this SCM user
     var myTender = [];
     for (var i = 0; i < tenderAll.length; i++) {
       if (tenderAll[i].kode_user_scm === session.kode_user) myTender.push(tenderAll[i]);
@@ -324,7 +365,6 @@ function getDashboardData(session) {
       if (t.status_tahap === 'DRAFTING_RKS_HPS' || t.status_tahap === 'KLARIFIKASI_NEGOSIASI') need_action++;
     }
 
-    // Filter contract by this SCM user
     var myContract = [];
     for (var i = 0; i < contractAll.length; i++) {
       if (contractAll[i].kode_user_scm === session.kode_user) myContract.push(contractAll[i]);
@@ -332,11 +372,10 @@ function getDashboardData(session) {
 
     var contract_active = 0, contract_done = 0;
     for (var i = 0; i < myContract.length; i++) {
-      if (myContract[i].status === CONTRACT_TAHAP.SELESAI) contract_done++;
+      if (myContract[i].status === 'SELESAI') contract_done++;
       else contract_active++;
     }
 
-    // Filter delivery by this SCM user
     var myDelivery = [];
     for (var i = 0; i < deliveryAll.length; i++) {
       if (deliveryAll[i].kode_user === session.kode_user) myDelivery.push(deliveryAll[i]);
@@ -344,11 +383,10 @@ function getDashboardData(session) {
 
     var delivery_active = 0, delivery_done = 0;
     for (var i = 0; i < myDelivery.length; i++) {
-      if (myDelivery[i].status === DELIVERY_TAHAP.SELESAI) delivery_done++;
+      if (myDelivery[i].status === 'SELESAI') delivery_done++;
       else delivery_active++;
     }
 
-    // Last 5 tender reversed
     var tSliceStart = myTender.length - 5;
     if (tSliceStart < 0) tSliceStart = 0;
     var tLatestSlice = [];
@@ -358,21 +396,15 @@ function getDashboardData(session) {
 
     summary = {
       total_rencana_approved: total_rencana_approved,
-      total_tender:           myTender.length,
-      tender_active:          tender_active,
-      tender_done:            tender_done,
-      need_action:            need_action,
-      total_contract:         myContract.length,
-      contract_active:        contract_active,
-      contract_done:          contract_done,
-      total_delivery:         myDelivery.length,
-      delivery_active:        delivery_active,
-      delivery_done:          delivery_done,
-      latest:                 latest
+      total_tender: myTender.length, tender_active: tender_active,
+      tender_done: tender_done, need_action: need_action,
+      total_contract: myContract.length, contract_active: contract_active,
+      contract_done: contract_done, total_delivery: myDelivery.length,
+      delivery_active: delivery_active, delivery_done: delivery_done,
+      latest: latest
     };
 
   } else if (role === ROLES.GM) {
-    // Rencana counts
     var pending_rencana_approval = 0, approved_rencana = 0;
     var pendingRencanaList = [];
     for (var i = 0; i < rencanaAll.length; i++) {
@@ -384,7 +416,6 @@ function getDashboardData(session) {
       if (r.gm_approval === DOC_STATUS.APPROVED) approved_rencana++;
     }
 
-    // Tender pending approval
     var tender_pending_approval = 0;
     var pendingTenderList = [];
     for (var i = 0; i < tenderAll.length; i++) {
@@ -395,37 +426,32 @@ function getDashboardData(session) {
       }
     }
 
-    // Contract pending TTD (status is FINAL or TTD_GM)
     var contract_pending_ttd = 0;
     for (var i = 0; i < contractAll.length; i++) {
       var c = contractAll[i];
-      if (c.status === CONTRACT_TAHAP.FINAL || c.status === CONTRACT_TAHAP.TTD_GM) {
-        contract_pending_ttd++;
-      }
+      if (c.status === 'FINAL' || c.status === 'TTD_GM') contract_pending_ttd++;
     }
 
-    // Delivery pending verifikasi
     var delivery_pending_verifikasi = 0;
     for (var i = 0; i < deliveryAll.length; i++) {
-      if (deliveryAll[i].status === DELIVERY_TAHAP.VERIFIKASI) delivery_pending_verifikasi++;
+      if (deliveryAll[i].status === 'VERIFIKASI') delivery_pending_verifikasi++;
     }
 
-    // latest_need_action: top 3 pending rencana + top 3 pending tender
     var latest_need_action = [];
     for (var i = 0; i < pendingRencanaList.length; i++) latest_need_action.push(pendingRencanaList[i]);
     for (var i = 0; i < pendingTenderList.length; i++) latest_need_action.push(pendingTenderList[i]);
 
     summary = {
-      total_rencana:               rencanaAll.length,
-      pending_rencana_approval:    pending_rencana_approval,
-      approved_rencana:            approved_rencana,
-      total_tender:                tenderAll.length,
-      tender_pending_approval:     tender_pending_approval,
-      total_contract:              contractAll.length,
-      contract_pending_ttd:        contract_pending_ttd,
-      total_delivery:              deliveryAll.length,
+      total_rencana: rencanaAll.length,
+      pending_rencana_approval: pending_rencana_approval,
+      approved_rencana: approved_rencana,
+      total_tender: tenderAll.length,
+      tender_pending_approval: tender_pending_approval,
+      total_contract: contractAll.length,
+      contract_pending_ttd: contract_pending_ttd,
+      total_delivery: deliveryAll.length,
       delivery_pending_verifikasi: delivery_pending_verifikasi,
-      latest_need_action:          latest_need_action
+      latest_need_action: latest_need_action
     };
   }
 

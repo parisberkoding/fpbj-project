@@ -549,7 +549,7 @@ function handleLogin() {
       setLoading(false);
       showAlert('Server error: ' + err.message, 'error');
     })
-    .handleLogin({ action: 'login', username: username, password: password });
+    .handleLogin({ username: username, password: password });
 }
 
 document.addEventListener('keydown', function(e) {

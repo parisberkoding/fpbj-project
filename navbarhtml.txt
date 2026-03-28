@@ -526,7 +526,7 @@ function initNavbar(userSession) {
 
   var roleLabels = {
     USER:'Pengusul', TIM_SURVEY:'Tim Survey',
-    FPBJ:'FPBJ', SCM:'SCM', GM:'General Manager'
+    SCM:'SCM', GM:'General Manager', ADMIN:'Administrator'
   };
 
   var names    = userSession.nama_lengkap.split(' ');
