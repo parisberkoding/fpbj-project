@@ -195,25 +195,26 @@ function approveTender(session, payload) {
   if (session.role !== ROLES.GM && session.role !== ROLES.ADMIN) {
     return { success: false, message: 'Hanya GM atau ADMIN yang bisa meng-approve tender.' };
   }
-  if (!payload.kode_tender || !payload.action || !payload.doc_type) {
-    return { success: false, message: 'kode_tender, action, doc_type wajib.' };
+  var decision = payload.decision || payload.action;
+  if (!payload.kode_tender || !decision || !payload.doc_type) {
+    return { success: false, message: 'kode_tender, decision, doc_type wajib.' };
   }
-  if (['approve','reject','revise'].indexOf(payload.action) === -1) {
-    return { success: false, message: 'Action harus: approve / reject / revise.' };
+  if (['approve','reject','revise'].indexOf(decision) === -1) {
+    return { success: false, message: 'Decision harus: approve / reject / revise.' };
   }
 
   var tender = getRowByField(SHEETS.TENDER, 'kode_tender', payload.kode_tender);
   if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
 
   var statusMap = { approve: DOC_STATUS.APPROVED, reject: DOC_STATUS.REJECTED, revise: DOC_STATUS.REVISED };
-  var newStatus = statusMap[payload.action];
+  var newStatus = statusMap[decision];
   var updates   = {};
 
   if (payload.doc_type === 'rks') {
     updates.rks_approval   = newStatus;
     updates.rks_approve_at = now();
     updates.rks_notes      = payload.catatan || '';
-    if (payload.action === 'approve') {
+    if (decision === 'approve') {
       updates.status_tahap   = TENDER_TAHAP.UNDANGAN;
       updates.status_dokumen = DOC_STATUS.PENDING;
     } else {
@@ -223,14 +224,14 @@ function approveTender(session, payload) {
     updates.bahp_approval   = newStatus;
     updates.bahp_approve_at = now();
     updates.bahp_notes      = payload.catatan || '';
-    if (payload.action === 'approve') {
+    if (decision === 'approve') {
       updates.status_tahap   = TENDER_TAHAP.TTD_SKPP;
       updates.status_dokumen = DOC_STATUS.PENDING;
     } else {
       updates.status_dokumen = newStatus;
     }
   } else if (payload.doc_type === 'skpp') {
-    if (payload.action === 'approve') {
+    if (decision === 'approve') {
       updates.status_tahap   = TENDER_TAHAP.CREATE_PO;
       updates.status_dokumen = DOC_STATUS.PENDING;
     } else {
@@ -245,7 +246,7 @@ function approveTender(session, payload) {
     updates.status_tahap || tender.status_tahap, newStatus, payload.catatan || '', '');
 
   var msg = payload.doc_type.toUpperCase() + ' ' +
-    (payload.action === 'approve' ? 'disetujui' : payload.action === 'reject' ? 'ditolak' : 'diminta revisi') +
+    (decision === 'approve' ? 'disetujui' : decision === 'reject' ? 'ditolak' : 'diminta revisi') +
     ' oleh ' + session.role + '.';
   return { success: true, message: msg };
 }
