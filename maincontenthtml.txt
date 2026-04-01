@@ -168,6 +168,11 @@
     /* ── Upload zone ── */
     .upload-zone{border:2px dashed #d0dce8;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .2s;}
     .upload-zone:hover{border-color:var(--geo-blue);background:#f8fbff;}
+
+    /* ── Responsive detail grid ── */
+    @media(max-width:768px){
+      .detail-grid-2col{grid-template-columns:1fr!important;}
+    }
   </style>
 </head>
 <body>
@@ -328,6 +333,7 @@ var PAGE_TITLES = {
   'dashboard':        'Dashboard',
   'rencana-baru':     'Buat Rencana Baru',
   'rencana-list':     'Daftar Rencana Pengadaan',
+  'rencana-detail':   'Detail Rencana',
   'approval-rencana': 'Approval Rencana',
   'tender-baru':      'Buat Tender',
   'tender-list':      'Daftar Tender',
@@ -359,6 +365,7 @@ window.loadPage = function(page) {
     if      (page === 'dashboard')        promise = renderDashboard();
     else if (page === 'rencana-list')     promise = renderRencanaList();
     else if (page === 'rencana-baru')     { el.innerHTML = renderFormRencana(); return; }
+    else if (page === 'rencana-detail')   promise = renderRencanaDetail();
     else if (page === 'approval-rencana') promise = renderApprovalRencana();
     else if (page === 'tender-list')      promise = renderTenderList();
     else if (page === 'tender-baru')      { el.innerHTML = renderFormTender(); return; }
@@ -562,6 +569,7 @@ function _renderRencanaTable(data) {
       '<td>' + badgeHtml(r.status) + '</td>' +
       '<td style="font-size:11px;color:var(--text-muted)">' + fmtDate(r.created_at) + '</td>' +
       '<td><div class="table-action">' + docBtn +
+        '<button class="btn btn-sm btn-primary" onclick="_viewRencanaDetail(\'' + r.kode_rencana + '\')"><i class="bi bi-eye"></i> Detail</button>' +
         (canReview ? '<button class="btn btn-sm btn-outline" onclick="_openRencanaApproval(\'' + r.kode_rencana + '\',\'' + (r.judul||'').replace(/'/g,'') + '\')"><i class="bi bi-check2-circle"></i> Review</button>' : '') +
         (canSap    ? '<button class="btn btn-sm btn-outline" onclick="_openSapModal(\'' + r.kode_rencana + '\')"><i class="bi bi-input-cursor-text"></i> SAP</button>' : '') +
       '</div></td></tr>';
@@ -617,6 +625,7 @@ function _submitSap(kode) {
 // FORM RENCANA BARU
 // ============================================================
 var _selectedFile = null;
+var _selectedFileData = null;
 
 function renderFormRencana() {
   return '<div class="page-header">' +
@@ -642,6 +651,18 @@ function renderFormRencana() {
           '<input type="text" class="form-input" id="frm_divisi" placeholder="e.g. Operasi &amp; Pemeliharaan"></div>' +
       '</div>' +
       '<div style="display:flex;flex-direction:column;gap:14px">' +
+        /* Upload Dokumen FPBJ */
+        '<div class="card"><div class="card-header"><div class="card-title"><i class="bi bi-cloud-arrow-up" style="color:var(--geo-blue)"></i> Upload Dokumen FPBJ</div></div>' +
+          '<div class="upload-zone" id="uploadZone" onclick="document.getElementById(\'fileInput\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--geo-blue)\';this.style.background=\'#f0f6ff\'" ondragleave="this.style.borderColor=\'#d0dce8\';this.style.background=\'\'" ondrop="_handleFileDrop(event)">' +
+            '<i class="bi bi-file-earmark-arrow-up"></i>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:4px">Klik atau seret file ke sini</div>' +
+            '<div style="font-size:11.5px;color:var(--text-muted)">Format: PDF, Word (.docx), PowerPoint (.pptx)</div>' +
+            '<div style="font-size:10.5px;color:var(--text-light);margin-top:4px">Maks. 10MB per file</div>' +
+          '</div>' +
+          '<input type="file" id="fileInput" accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation" style="display:none" onchange="_handleFileSelect(this)">' +
+          '<div id="filePreview" style="display:none;margin-top:12px"></div>' +
+        '</div>' +
+        /* Alur Persetujuan */
         '<div class="card"><div class="card-header"><div class="card-title">Alur Persetujuan</div></div>' +
           '<div class="progress-step"><div class="progress-dot pending">1</div>' +
             '<div><div style="font-size:13px;font-weight:600">Tim Market Survey</div>' +
@@ -658,6 +679,72 @@ function renderFormRencana() {
     '</div>';
 }
 
+function _getFileIcon(name) {
+  var ext = (name || '').split('.').pop().toLowerCase();
+  if (ext === 'pdf') return '<i class="bi bi-file-earmark-pdf-fill" style="font-size:24px;color:#CD142C"></i>';
+  if (ext === 'doc' || ext === 'docx') return '<i class="bi bi-file-earmark-word-fill" style="font-size:24px;color:#2B579A"></i>';
+  if (ext === 'ppt' || ext === 'pptx') return '<i class="bi bi-file-earmark-ppt-fill" style="font-size:24px;color:#D24726"></i>';
+  return '<i class="bi bi-file-earmark-fill" style="font-size:24px;color:var(--text-muted)"></i>';
+}
+
+function _handleFileDrop(e) {
+  e.preventDefault();
+  var zone = document.getElementById('uploadZone');
+  zone.style.borderColor = '#d0dce8';
+  zone.style.background = '';
+  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    _processFile(e.dataTransfer.files[0]);
+  }
+}
+
+function _handleFileSelect(input) {
+  if (input.files && input.files.length > 0) {
+    _processFile(input.files[0]);
+  }
+}
+
+function _processFile(file) {
+  var allowed = ['application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+  if (allowed.indexOf(file.type) === -1) {
+    showToast('Format file tidak didukung. Gunakan PDF, Word, atau PowerPoint.', 'error');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Ukuran file melebihi 10MB.', 'error');
+    return;
+  }
+  _selectedFile = file;
+  var sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+  document.getElementById('filePreview').style.display = 'block';
+  document.getElementById('filePreview').innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:#f8fafd;border:1px solid var(--border);border-radius:10px">' +
+      _getFileIcon(file.name) +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + file.name + '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted)">' + sizeMB + ' MB</div>' +
+      '</div>' +
+      '<button class="btn btn-sm btn-outline" onclick="_removeFile()" style="flex-shrink:0"><i class="bi bi-x-lg"></i></button>' +
+    '</div>';
+
+  // Convert to base64
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var base64 = e.target.result.split(',')[1];
+    _selectedFileData = { base64: base64, name: file.name, type: file.type };
+  };
+  reader.readAsDataURL(file);
+}
+
+function _removeFile() {
+  _selectedFile = null;
+  _selectedFileData = null;
+  document.getElementById('filePreview').style.display = 'none';
+  document.getElementById('filePreview').innerHTML = '';
+  document.getElementById('fileInput').value = '';
+}
+
 function _submitRencana() {
   var judul    = (document.getElementById('frm_judul').value || '').trim();
   var desc     = (document.getElementById('frm_desc').value || '').trim();
@@ -672,6 +759,33 @@ function _submitRencana() {
   api('createRencana', {judul:judul, deskripsi:desc, kategori:kategori, estimasi_nilai:nilai, divisi:divisi})
     .then(function(res) {
       if (!res.success) { document.getElementById('formAlert').innerHTML = '<div class="alert-box error"><i class="bi bi-x-circle-fill"></i> ' + res.message + '</div>'; return; }
+
+      // Jika ada file yang dipilih, upload setelah rencana dibuat
+      if (_selectedFileData && res.kode_rencana) {
+        document.getElementById('formAlert').innerHTML = '<div class="alert-box info"><i class="bi bi-cloud-arrow-up"></i> Mengupload dokumen FPBJ...</div>';
+        api('uploadDokumenRencana', {
+          kode_rencana: res.kode_rencana,
+          file_base64: _selectedFileData.base64,
+          file_name: _selectedFileData.name,
+          mime_type: _selectedFileData.type,
+          doc_type: 'fpbj'
+        }).then(function(uploadRes) {
+          _selectedFile = null; _selectedFileData = null;
+          if (uploadRes.success) {
+            document.getElementById('formAlert').innerHTML = '<div class="alert-box success"><i class="bi bi-check-circle-fill"></i> Rencana dibuat: <strong>' + res.kode_rencana + '</strong> &mdash; Dokumen berhasil diupload.</div>';
+            showToast('Rencana & dokumen berhasil disimpan!', 'success');
+          } else {
+            document.getElementById('formAlert').innerHTML = '<div class="alert-box success"><i class="bi bi-check-circle-fill"></i> Rencana dibuat: <strong>' + res.kode_rencana + '</strong><br><span style="color:var(--geo-red)">Dokumen gagal diupload: ' + uploadRes.message + '</span></div>';
+            showToast('Rencana dibuat, tapi upload gagal.', 'error');
+          }
+          setTimeout(function() { loadPage('rencana-list'); }, 1800);
+        }).catch(function(err) {
+          document.getElementById('formAlert').innerHTML = '<div class="alert-box success"><i class="bi bi-check-circle-fill"></i> Rencana dibuat. Upload error: ' + err.message + '</div>';
+          setTimeout(function() { loadPage('rencana-list'); }, 1800);
+        });
+        return;
+      }
+
       document.getElementById('formAlert').innerHTML = '<div class="alert-box success"><i class="bi bi-check-circle-fill"></i> Rencana dibuat: <strong>' + res.kode_rencana + '</strong></div>';
       showToast(res.message, 'success');
       setTimeout(function() { loadPage('rencana-list'); }, 1400);
@@ -1153,6 +1267,376 @@ function _submitAddUser() {
     showToast(res.message, res.success?'success':'error');
     if (res.success) loadPage('user-management');
   });
+}
+
+// ============================================================
+// RENCANA DETAIL — with progress bars
+// ============================================================
+var _detailKodeRencana = '';
+
+function _viewRencanaDetail(kode) {
+  _detailKodeRencana = kode;
+  loadPage('rencana-detail');
+}
+
+function renderRencanaDetail() {
+  var kode = _detailKodeRencana;
+  if (!kode) {
+    return Promise.resolve(renderError('Kode rencana tidak ditemukan. Kembali ke daftar.'));
+  }
+
+  return api('getFullTrace', {kode_rencana: kode}).then(function(res) {
+    if (!res.success) throw new Error(res.message);
+    var trace = res.trace;
+    var r     = trace.rencana.data;
+    var t     = trace.tender.data;
+    var c     = trace.contract.data;
+    var deliveries = trace.delivery.data || [];
+
+    if (!r) throw new Error('Data rencana tidak ditemukan.');
+
+    // ── Header ──
+    var html = '<div class="page-header">' +
+      '<div><h1 class="page-title">Detail Pengadaan</h1>' +
+      '<p class="page-subtitle"><span class="table-code">' + r.kode_rencana + '</span> &mdash; ' + r.judul + '</p></div>' +
+      '<div class="page-actions">' +
+        '<button class="btn btn-outline" onclick="loadPage(\'rencana-list\')"><i class="bi bi-arrow-left"></i> Kembali</button>' +
+        '<button class="btn btn-outline" onclick="_viewRencanaDetail(\'' + kode + '\')"><i class="bi bi-arrow-clockwise"></i> Refresh</button>' +
+      '</div></div>';
+
+    // ── HORIZONTAL PROGRESS BAR — Main Status Tracking ──
+    html += '<div class="card" style="margin-bottom:20px">' +
+      '<div class="card-header"><div><div class="card-title"><i class="bi bi-signpost-split" style="color:var(--geo-blue)"></i> Status Pengadaan</div>' +
+      '<div class="card-sub">Tracking status utama proses pengadaan</div></div></div>';
+
+    html += _buildHorizontalProgress(r, t, c, deliveries);
+    html += '</div>';
+
+    // ── INFO CARDS — 2 columns ──
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">';
+
+    // Left: Informasi Rencana
+    html += '<div class="card">' +
+      '<div class="card-header"><div class="card-title"><i class="bi bi-info-circle" style="color:var(--geo-blue)"></i> Informasi Rencana</div></div>' +
+      '<table style="width:100%;font-size:13px">' +
+        _infoRow('Judul', r.judul) +
+        _infoRow('Kategori', r.kategori || '-') +
+        _infoRow('Estimasi Nilai', fmtRupiah(r.estimasi_nilai)) +
+        _infoRow('Pengusul', r.nama_pengusul + ' (' + (r.divisi_pengusul || '-') + ')') +
+        _infoRow('Status', badgeHtml(r.status)) +
+        _infoRow('Tanggal Dibuat', fmtDate(r.created_at)) +
+        _infoRow('Nomor PR SAP', r.nomer_pr_sap || '<span style="color:var(--text-muted)">Belum diisi</span>') +
+        _infoRow('Dokumen FPBJ', r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i> Lihat Dokumen</a>' : '<span style="color:var(--text-muted)">Belum diupload</span>') +
+      '</table></div>';
+
+    // Right: Upload Dokumen (for USER) or Approval Info
+    if (APP.user.role === 'USER' || APP.user.role === 'ADMIN') {
+      html += '<div class="card">' +
+        '<div class="card-header"><div class="card-title"><i class="bi bi-cloud-arrow-up" style="color:var(--geo-blue)"></i> Upload Dokumen</div></div>' +
+        '<div class="upload-zone" onclick="document.getElementById(\'detailFileInput\').click()" ' +
+          'ondragover="event.preventDefault();this.style.borderColor=\'var(--geo-blue)\'" ' +
+          'ondragleave="this.style.borderColor=\'#d0dce8\'" ' +
+          'ondrop="_handleDetailFileDrop(event)">' +
+          '<i class="bi bi-file-earmark-arrow-up"></i>' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:4px">Upload dokumen tambahan</div>' +
+          '<div style="font-size:11.5px;color:var(--text-muted)">PDF, Word, PowerPoint (Maks 10MB)</div>' +
+        '</div>' +
+        '<input type="file" id="detailFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx" style="display:none" onchange="_handleDetailFileUpload(this,\'' + kode + '\')">' +
+        '<div id="detailUploadStatus"></div>' +
+      '</div>';
+    } else {
+      // Show approval summary
+      html += '<div class="card">' +
+        '<div class="card-header"><div class="card-title"><i class="bi bi-clipboard-check" style="color:var(--geo-blue)"></i> Status Approval</div></div>' +
+        '<table style="width:100%;font-size:13px">' +
+          _infoRow('GM Approval', badgeHtml(r.gm_approval || 'PENDING')) +
+          _infoRow('GM Notes', r.gm_notes || '-') +
+          _infoRow('GM Approve At', fmtDate(r.gm_approve_at)) +
+          _infoRow('Survey Approval', badgeHtml(r.survey_approval || 'PENDING')) +
+          _infoRow('Survey Notes', r.survey_notes || '-') +
+          _infoRow('Survey Approve At', fmtDate(r.survey_approve_at)) +
+        '</table></div>';
+    }
+
+    html += '</div>'; // end grid
+
+    // ── VERTICAL PROGRESS BAR — Review & Activity Timeline ──
+    html += '<div class="card">' +
+      '<div class="card-header"><div><div class="card-title"><i class="bi bi-clock-history" style="color:var(--geo-blue)"></i> Timeline Aktivitas</div>' +
+      '<div class="card-sub">Riwayat review dan persetujuan dari setiap role</div></div></div>';
+
+    html += _buildVerticalTimeline(trace);
+    html += '</div>';
+
+    return html;
+  });
+}
+
+function _infoRow(label, value) {
+  return '<tr><td style="padding:8px 0;color:var(--text-muted);width:140px;vertical-align:top;font-weight:500">' + label + '</td>' +
+    '<td style="padding:8px 0;color:var(--text-primary);font-weight:600">' + value + '</td></tr>';
+}
+
+function _buildHorizontalProgress(r, t, c, deliveries) {
+  // Define the main workflow steps
+  var steps = [
+    { key: 'perencanaan', label: 'Perencanaan', sub: 'Pengusul submit' },
+    { key: 'review_survey', label: 'Review Survey', sub: 'Tim Survey' },
+    { key: 'review_gm', label: 'Persetujuan GM', sub: 'General Manager' },
+    { key: 'tender', label: 'Proses Tender', sub: 'SCM' },
+    { key: 'kontrak', label: 'Kontrak', sub: 'TTD & Finalisasi' },
+    { key: 'sa_gr', label: 'SA/GR', sub: 'Penerimaan' },
+    { key: 'invoice', label: 'Invoice', sub: 'Pembayaran' },
+    { key: 'selesai', label: 'Selesai', sub: 'Completed' }
+  ];
+
+  // Determine which steps are done/active
+  var stepStates = [];
+  for (var i = 0; i < steps.length; i++) {
+    stepStates.push('pending');
+  }
+
+  // Perencanaan - always at least started if rencana exists
+  stepStates[0] = 'done';
+
+  // Review Survey
+  if (r.survey_approval === 'APPROVED') stepStates[1] = 'done';
+  else if (r.survey_approval === 'PENDING' || r.status === 'PENDING') stepStates[1] = 'active';
+
+  // Review GM
+  if (r.gm_approval === 'APPROVED') stepStates[2] = 'done';
+  else if (r.gm_approval === 'PENDING' || (r.status === 'PENDING' && r.survey_approval === 'APPROVED')) stepStates[2] = 'active';
+
+  // Tender
+  if (t) {
+    if (t.status_tahap === 'SELESAI') stepStates[3] = 'done';
+    else stepStates[3] = 'active';
+  }
+
+  // Kontrak
+  if (c) {
+    if (c.status === 'SELESAI') stepStates[4] = 'done';
+    else stepStates[4] = 'active';
+  }
+
+  // SA/GR, Invoice, Selesai
+  if (deliveries.length > 0) {
+    var d = deliveries[0];
+    if (d.status === 'SA_GR') stepStates[5] = 'active';
+    else if (d.status === 'INVOICE' || d.status === 'VERIFIKASI' || d.status === 'SELESAI') stepStates[5] = 'done';
+    if (d.status === 'INVOICE') stepStates[6] = 'active';
+    else if (d.status === 'VERIFIKASI' || d.status === 'SELESAI') stepStates[6] = 'done';
+    if (d.status === 'SELESAI') stepStates[7] = 'done';
+    else if (d.status === 'VERIFIKASI') stepStates[7] = 'active';
+  }
+
+  // Build horizontal progress HTML
+  var html = '<div style="position:relative;padding:20px 10px 10px;overflow-x:auto">' +
+    '<div style="display:flex;align-items:flex-start;gap:0;min-width:fit-content">';
+
+  for (var i = 0; i < steps.length; i++) {
+    var st = stepStates[i];
+    var dotClass = st === 'done' ? 'done' : st === 'active' ? 'active' : '';
+    var dotContent = st === 'done' ? '<i class="bi bi-check" style="font-size:13px"></i>' : String(i + 1);
+    var lineColor = st === 'done' ? 'var(--geo-green)' : st === 'active' ? 'var(--geo-blue)' : '#e0e8f5';
+
+    html += '<div class="flow-step ' + dotClass + '" style="min-width:100px;flex:1">' +
+      '<div class="flow-dot">' + dotContent + '</div>' +
+      '<div class="flow-label" style="max-width:100px;font-size:11px">' + steps[i].label + '</div>' +
+      '<div style="font-size:9px;color:var(--text-muted);text-align:center;margin-top:2px">' + steps[i].sub + '</div>' +
+    '</div>';
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+function _buildVerticalTimeline(trace) {
+  // Collect all events from all phases
+  var events = [];
+  var rLogs = trace.rencana.logs || [];
+  var tLogs = trace.tender.logs || [];
+  var cLogs = trace.contract.logs || [];
+  var r     = trace.rencana.data;
+  var t     = trace.tender.data;
+  var c     = trace.contract.data;
+
+  // Rencana events
+  for (var i = 0; i < rLogs.length; i++) {
+    var log = rLogs[i];
+    events.push({
+      phase: 'Perencanaan',
+      phaseIcon: 'bi-clipboard-text',
+      phaseColor: 'var(--geo-blue)',
+      role: log.role || 'SYSTEM',
+      nama: log.nama_lengkap || '-',
+      status: log.status_dokumen || '-',
+      catatan: log.catatan || '',
+      date: log.created_at || '',
+      viewCount: log.view_count || 0,
+      viewDuration: log.total_view_duration_sec || 0
+    });
+  }
+
+  // Tender events
+  for (var i = 0; i < tLogs.length; i++) {
+    var log = tLogs[i];
+    events.push({
+      phase: 'Tender',
+      phaseIcon: 'bi-file-earmark-text',
+      phaseColor: '#f59e0b',
+      role: log.role || 'SYSTEM',
+      nama: log.nama_lengkap || '-',
+      status: log.status_dokumen || log.tahap || '-',
+      catatan: log.catatan || '',
+      date: log.created_at || ''
+    });
+  }
+
+  // Contract events
+  for (var i = 0; i < cLogs.length; i++) {
+    var log = cLogs[i];
+    events.push({
+      phase: 'Kontrak',
+      phaseIcon: 'bi-file-earmark-check',
+      phaseColor: 'var(--geo-green)',
+      role: log.role || 'SYSTEM',
+      nama: log.nama_lengkap || '-',
+      status: log.status || '-',
+      catatan: log.catatan || '',
+      date: log.created_at || ''
+    });
+  }
+
+  // Sort by date descending (newest first)
+  events.sort(function(a, b) { return a.date > b.date ? -1 : 1; });
+
+  if (!events.length) {
+    return '<div class="empty-state" style="padding:24px"><div class="empty-title">Belum ada aktivitas</div></div>';
+  }
+
+  // Role colors & icons
+  var roleColors = {
+    USER: '#8DC63F', TIM_SURVEY: '#CEDF51', SCM: '#0B50A1', GM: '#000', ADMIN: '#CD142C', SYSTEM: '#7a8899'
+  };
+  var roleLabels = {
+    USER: 'Pengusul', TIM_SURVEY: 'Tim Survey', SCM: 'SCM', GM: 'General Manager', ADMIN: 'Admin', SYSTEM: 'System'
+  };
+
+  var statusIcons = {
+    DRAFT: 'bi-pencil', PENDING: 'bi-hourglass-split', PEER_REVIEWED: 'bi-eye',
+    REVIEWED: 'bi-book', APPROVED: 'bi-check-circle-fill', REVISED: 'bi-arrow-repeat',
+    REJECTED: 'bi-x-circle-fill', SAP_UPDATED: 'bi-database-fill-gear'
+  };
+
+  var statusColors = {
+    DRAFT: '#7a8899', PENDING: '#f0a000', PEER_REVIEWED: '#0B50A1', REVIEWED: '#3b79cc',
+    APPROVED: '#2d7a2d', REVISED: '#e07000', REJECTED: '#CD142C', SAP_UPDATED: '#0B50A1'
+  };
+
+  // Build vertical timeline
+  var html = '<div style="position:relative;padding:4px 0 4px 0">';
+
+  for (var i = 0; i < events.length; i++) {
+    var ev = events[i];
+    var isLast = i === events.length - 1;
+    var sColor = statusColors[ev.status] || '#7a8899';
+    var sIcon  = statusIcons[ev.status] || 'bi-circle';
+    var rColor = roleColors[ev.role] || '#7a8899';
+    var statusLabel = {DRAFT:'Draft',PENDING:'Menunggu',PEER_REVIEWED:'Dilihat',REVIEWED:'Dibaca',APPROVED:'Disetujui',REVISED:'Revisi',REJECTED:'Ditolak',SAP_UPDATED:'SAP Updated'};
+
+    html += '<div style="display:flex;gap:16px;position:relative;padding-bottom:' + (isLast ? '8' : '24') + 'px">';
+
+    // Vertical line connector
+    if (!isLast) {
+      html += '<div style="position:absolute;left:19px;top:36px;bottom:0;width:2px;background:linear-gradient(to bottom,' + sColor + ',#e8edf5)"></div>';
+    }
+
+    // Status dot
+    html += '<div style="width:40px;height:40px;border-radius:50%;background:' + sColor + ';color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0;z-index:1;box-shadow:0 2px 8px rgba(0,0,0,0.12)">' +
+      '<i class="bi ' + sIcon + '" style="font-size:16px"></i></div>';
+
+    // Content
+    html += '<div style="flex:1;min-width:0;padding-top:2px">' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">' +
+        '<span style="font-size:13px;font-weight:700;color:var(--text-primary)">' + (statusLabel[ev.status] || ev.status) + '</span>' +
+        '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;background:' + rColor + '15;color:' + rColor + ';border:1px solid ' + rColor + '30">' + (roleLabels[ev.role] || ev.role) + '</span>' +
+        '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:12px;background:#f0f4fa;color:var(--text-muted)">' +
+          '<i class="bi ' + ev.phaseIcon + '" style="font-size:10px"></i> ' + ev.phase + '</span>' +
+      '</div>' +
+      '<div style="font-size:12.5px;color:var(--text-primary);font-weight:500">' + ev.nama + '</div>';
+
+    if (ev.catatan) {
+      html += '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;padding:8px 12px;background:#f8fafd;border-radius:8px;border-left:3px solid ' + sColor + '">' +
+        '<i class="bi bi-chat-left-text" style="font-size:11px;margin-right:4px"></i> ' + ev.catatan + '</div>';
+    }
+
+    if (ev.viewCount && ev.viewCount > 0) {
+      var mins = Math.floor((ev.viewDuration || 0) / 60);
+      var secs = (ev.viewDuration || 0) % 60;
+      html += '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">' +
+        '<i class="bi bi-eye" style="font-size:11px"></i> ' + ev.viewCount + ' kali dilihat' +
+        (mins > 0 ? ' &middot; ' + mins + 'm ' + secs + 's total durasi' : '') + '</div>';
+    }
+
+    html += '<div style="font-size:11px;color:var(--text-light);margin-top:4px"><i class="bi bi-clock" style="font-size:10px"></i> ' + fmtDate(ev.date) + '</div>';
+    html += '</div></div>'; // end content + row
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// Detail file upload handlers
+function _handleDetailFileDrop(e) {
+  e.preventDefault();
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    _uploadDetailFile(e.dataTransfer.files[0], _detailKodeRencana);
+  }
+}
+
+function _handleDetailFileUpload(input, kode) {
+  if (input.files && input.files[0]) {
+    _uploadDetailFile(input.files[0], kode);
+  }
+}
+
+function _uploadDetailFile(file, kode) {
+  var allowed = ['application/pdf',
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+  if (allowed.indexOf(file.type) === -1) {
+    showToast('Format file tidak didukung.', 'error'); return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Ukuran file melebihi 10MB.', 'error'); return;
+  }
+
+  var statusEl = document.getElementById('detailUploadStatus');
+  if (statusEl) statusEl.innerHTML = '<div class="alert-box info" style="margin-top:12px"><i class="bi bi-arrow-repeat"></i> Mengupload ' + file.name + '...</div>';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var base64 = e.target.result.split(',')[1];
+    api('uploadDokumenRencana', {
+      kode_rencana: kode,
+      file_base64: base64,
+      file_name: file.name,
+      mime_type: file.type,
+      doc_type: 'fpbj'
+    }).then(function(res) {
+      if (statusEl) {
+        statusEl.innerHTML = res.success
+          ? '<div class="alert-box success" style="margin-top:12px"><i class="bi bi-check-circle-fill"></i> ' + file.name + ' berhasil diupload!</div>'
+          : '<div class="alert-box error" style="margin-top:12px"><i class="bi bi-x-circle-fill"></i> ' + res.message + '</div>';
+      }
+      if (res.success) {
+        showToast('Dokumen berhasil diupload!', 'success');
+        setTimeout(function() { _viewRencanaDetail(kode); }, 1500);
+      }
+    });
+  };
+  reader.readAsDataURL(file);
 }
 
 // ============================================================
