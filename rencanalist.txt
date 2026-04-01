@@ -198,7 +198,7 @@ function renderRencanaTable(data) {
     var r = data[i];
     var canReview = r.status === 'PENDING' && (role === 'GM' || role === 'TIM_SURVEY');
     var canSap    = r.status === 'APPROVED' && role === 'USER';
-    var docBtn    = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i></a>' : '';
+    var docBtn    = r.link_dokumen_fpbj ? '<button class="btn btn-sm btn-outline" onclick="viewRencana(\'' + r.kode_rencana + '\')"><i class="bi bi-file-earmark-pdf"></i></button>' : '';
     rows += '<tr>' +
       '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
       '<td><div class="table-title">' + r.judul + '</div><div class="table-sub">' + (r.kategori||'') + ' &middot; ' + fmtRupiah(r.estimasi_nilai) + '</div></td>' +

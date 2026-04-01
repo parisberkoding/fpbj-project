@@ -208,6 +208,11 @@ function getFullTrace(session, payload) {
   if (!kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
 
   var rencana  = getRowByField(SHEETS.RENCANA, 'kode_rencana', kode_rencana);
+
+  // USER can only view their own rencana
+  if (rencana && session.role === ROLES.USER && rencana.kode_user_pengusul !== session.kode_user) {
+    return { success: false, message: 'Anda tidak memiliki akses untuk rencana ini.' };
+  }
   var tender   = getRowByField(SHEETS.TENDER,   'kode_rencana', kode_rencana);
   var contract = tender ? getRowByField(SHEETS.CONTRACT, 'kode_tender', tender.kode_tender) : null;
 

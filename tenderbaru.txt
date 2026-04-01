@@ -117,13 +117,13 @@
   <div class="card">
     <div class="card-header"><div class="card-title">Pilih Rencana Pengadaan</div></div>
     <div class="form-group">
-      <label class="form-label">Cari Kode / Judul Rencana (APPROVED)</label>
+      <label class="form-label">Cari Kode / Judul</label>
       <div style="position:relative">
         <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#a0aec0;font-size:14px"></i>
-        <input type="text" class="form-input" style="padding-left:36px" id="searchRenc" placeholder="Ketik kode atau judul..." oninput="searchRencana()">
+        <input type="text" class="form-input" style="padding-left:36px" id="searchRenc" placeholder="Filter kode atau judul..." oninput="filterApprovedRencana()">
       </div>
     </div>
-    <div id="rencanaOptions"><div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px;color:var(--text-muted)">Ketik untuk mencari rencana</div></div></div>
+    <div id="rencanaOptions"><div class="empty-state" style="padding:24px"><div class="empty-icon"><i class="bi bi-hourglass bi-xl"></i></div><div class="empty-title" style="font-size:13px">Memuat rencana...</div></div></div>
     <div id="selectedRencana" style="display:none;margin-top:12px;padding:14px;background:#EFF5FF;border-radius:10px;border:1px solid #c5d9f5">
       <div style="font-size:11.5px;font-weight:700;color:var(--geo-blue-dk);margin-bottom:6px;display:flex;align-items:center;gap:6px">
         <i class="bi bi-check-circle-fill"></i> Rencana Dipilih
@@ -172,23 +172,28 @@ var selectedKodeRencana = '';
   var user = window.APP && window.APP.user;
   if (user) document.getElementById('picScm').value = user.nama_lengkap;
   api('getRencanaList', {page:1,limit:100,filter:{status:'APPROVED'}}).then(function(res) {
-    if (res.success) allApprovedRencana = res.data;
+    if (res.success) {
+      allApprovedRencana = res.data;
+      renderApprovedList(allApprovedRencana);
+    }
   });
 })();
-function searchRencana() {
+function filterApprovedRencana() {
   var q = document.getElementById('searchRenc').value.toLowerCase();
-  var el = document.getElementById('rencanaOptions');
-  if (!q) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px;color:var(--text-muted)">Ketik untuk mencari</div></div>'; return; }
   var filtered = allApprovedRencana.filter(function(r) {
-    return (r.kode_rencana||'').toLowerCase().indexOf(q)!==-1 || (r.judul||'').toLowerCase().indexOf(q)!==-1;
+    return !q || (r.kode_rencana||'').toLowerCase().indexOf(q)!==-1 || (r.judul||'').toLowerCase().indexOf(q)!==-1;
   });
-  if (!filtered.length) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon"><i class="bi bi-search bi-xl"></i></div><div class="empty-title" style="font-size:13px">Tidak ada rencana APPROVED</div></div>'; return; }
+  renderApprovedList(filtered);
+}
+function renderApprovedList(list) {
+  var el = document.getElementById('rencanaOptions');
+  if (!list.length) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon"><i class="bi bi-search bi-xl"></i></div><div class="empty-title" style="font-size:13px">Tidak ada rencana APPROVED</div></div>'; return; }
   var html = '';
-  for (var i=0;i<filtered.length;i++) {
-    var r = filtered[i];
-    html += '<div onclick=\"selectRencana(\'\" + r.kode_rencana + \"\',\'\" + (r.judul||'').replace(/'/g,'') + \"\',\'\" + (r.kategori||'') + \"\',\'\" + fmtRupiah(r.estimasi_nilai) + \"\')" ' +
+  for (var i=0;i<list.length;i++) {
+    var r = list[i];
+    html += '<div onclick="selectRencana(\'' + r.kode_rencana + '\',\'' + (r.judul||'').replace(/'/g,'') + '\',\'' + (r.kategori||'') + '\',\'' + fmtRupiah(r.estimasi_nilai) + '\')" ' +
       'style="padding:12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:8px;transition:all 0.15s;display:flex;align-items:center;gap:12px" ' +
-      'onmouseover="this.style.background='#EFF5FF';this.style.borderColor='#c5d9f5'" onmouseout="this.style.background='';this.style.borderColor='var(--border)'">' +
+      'onmouseover="this.style.background=\'#EFF5FF\';this.style.borderColor=\'#c5d9f5\'" onmouseout="this.style.background=\'\';this.style.borderColor=\'var(--border)\'">' +
       '<i class="bi bi-file-earmark-text" style="font-size:22px;color:var(--geo-blue);flex-shrink:0"></i>' +
       '<div><div style="font-size:11.5px;font-weight:700;color:var(--geo-blue)">' + r.kode_rencana + '</div>' +
       '<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-top:2px">' + r.judul + '</div>' +

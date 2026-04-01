@@ -128,19 +128,6 @@
   <div class="stat-card lime"><div class="stat-icon lime"><i class="bi bi-hourglass-split"></i></div><div class="stat-value">-</div><div class="stat-label">Memuat...</div></div>
 </div>
 
-<div class="card" style="margin-bottom:20px">
-  <div class="card-header">
-    <div><div class="card-title">Alur Proses Pengadaan</div><div class="card-sub">4 tahap utama secara berurutan</div></div>
-  </div>
-  <div class="flow-timeline">
-    <div class="flow-step done"><div class="flow-dot"><i class="bi bi-check-lg" style="font-size:12px"></i></div><div class="flow-label">Perencanaan</div></div>
-    <div class="flow-step active"><div class="flow-dot">2</div><div class="flow-label">Approval</div></div>
-    <div class="flow-step"><div class="flow-dot">3</div><div class="flow-label">Tender</div></div>
-    <div class="flow-step"><div class="flow-dot">4</div><div class="flow-label">Kontrak</div></div>
-    <div class="flow-step"><div class="flow-dot">5</div><div class="flow-label">Delivery</div></div>
-  </div>
-</div>
-
 <div class="card" id="dashTable">
   <div class="card-header">
     <div><div class="card-title">Aktivitas Terbaru</div><div class="card-sub">Dokumen yang memerlukan perhatian</div></div>
