@@ -519,6 +519,32 @@ function setLoading(isLoading) {
   document.getElementById('btnArrow').style.display = isLoading ? 'none' : 'block';
 }
 
+function getRoleLandingPage(role) {
+  var map = {
+    'ADMIN':      'dashboard',
+    'USER':       'rencana-list',
+    'TIM_SURVEY': 'approval-rencana',
+    'SCM':        'tender-list',
+    'GM':         'dashboard'
+  };
+  return map[role] || 'dashboard';
+}
+
+function doRedirect(url) {
+  // Multiple fallback methods for GAS iframe redirect
+  try { window.top.location.href = url; } catch(e1) {
+    try { window.parent.location.href = url; } catch(e2) {
+      try { window.location.href = url; } catch(e3) {
+        // Last resort: create a link and click it
+        var a = document.createElement('a');
+        a.href = url; a.target = '_top';
+        document.body.appendChild(a);
+        a.click();
+      }
+    }
+  }
+}
+
 function handleLogin() {
   var username = document.getElementById('username').value.trim();
   var password = document.getElementById('password').value;
@@ -534,20 +560,40 @@ function handleLogin() {
   google.script.run
     .withSuccessHandler(function(data) {
       setLoading(false);
-      if (data.success) {
+      if (data && data.success) {
         showAlert(data.message, 'success');
-        // Redirect ke app dengan token di URL - GAS verify & render maincontent
+
+        // Tentukan halaman landing berdasarkan role user
+        var landingPage = 'dashboard';
+        if (data.user && data.user.role) {
+          landingPage = getRoleLandingPage(data.user.role);
+        }
+
+        var redirectUrl = WEB_APP_URL + '?page=' + landingPage + '&token=' + encodeURIComponent(data.token);
+
+        // Simpan session ke sessionStorage sebagai backup
+        try {
+          sessionStorage.setItem('geo_token', data.token);
+          if (data.user) sessionStorage.setItem('geo_user', JSON.stringify(data.user));
+          sessionStorage.setItem('geo_webapp_url', WEB_APP_URL);
+        } catch(e) {}
+
+        // Redirect dengan delay dan fallback
         setTimeout(function() {
-          window.top.location.href = WEB_APP_URL + '?page=dashboard&token=' + encodeURIComponent(data.token);
-        }, 600);
+          doRedirect(redirectUrl);
+          // Safety net: jika redirect gagal setelah 3 detik, coba lagi
+          setTimeout(function() {
+            doRedirect(redirectUrl);
+          }, 3000);
+        }, 500);
       } else {
-        showAlert(data.message || 'Login gagal.', 'error');
+        showAlert((data && data.message) || 'Login gagal. Periksa username dan password.', 'error');
         document.getElementById('password').classList.add('error');
       }
     })
     .withFailureHandler(function(err) {
       setLoading(false);
-      showAlert('Server error: ' + err.message, 'error');
+      showAlert('Server error: ' + (err && err.message ? err.message : 'Koneksi gagal. Coba lagi.'), 'error');
     })
     .handleLogin({ username: username, password: password });
 }

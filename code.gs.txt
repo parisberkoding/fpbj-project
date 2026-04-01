@@ -105,6 +105,12 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
+  // Jika page masih 'login' tapi sudah ada session valid, redirect ke landing page sesuai role
+  if (page === 'login' || page === 'dashboard') {
+    var roleLanding = { ADMIN:'dashboard', USER:'rencana-list', TIM_SURVEY:'approval-rencana', SCM:'tender-list', GM:'dashboard' };
+    if (page === 'login') page = roleLanding[session.role] || 'dashboard';
+  }
+
   // Render main app with the requested page
   var tmpl = HtmlService.createTemplateFromFile('maincontent');
   tmpl.initialPage = page;
