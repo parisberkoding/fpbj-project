@@ -296,6 +296,11 @@ function getRencanaDetail(session, payload) {
   var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', payload.kode_rencana);
   if (!rencana) return { success: false, message: 'Rencana tidak ditemukan.' };
 
+  // USER can only view their own rencana
+  if (session.role === ROLES.USER && rencana.kode_user_pengusul !== session.kode_user) {
+    return { success: false, message: 'Anda tidak memiliki akses untuk rencana ini.' };
+  }
+
   _trackView(session, payload.kode_rencana, 0);
 
   var allLogs = sheetToObjects(SHEETS.RENCANA_STATUS);

@@ -160,7 +160,7 @@ function showViewToast(msg, type) {
     for (var i=0; i<items.length; i++) {
       var r = items[i];
       var myStatus = role==='GM' ? (r.gm_approval||'PENDING') : (r.survey_approval||'PENDING');
-      var docBtn   = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i> Dok</a>' : '';
+      var docBtn   = r.link_dokumen_fpbj ? '<button class="btn btn-sm btn-outline" onclick="sessionStorage.setItem(\'view_kode_rencana\',\'' + r.kode_rencana + '\');loadView(\'rencana-detail\')"><i class="bi bi-file-earmark-pdf"></i> Dok</button>' : '';
       rows += '<tr>' +
         '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
         '<td><div class="table-title">' + r.judul + '</div><div class="table-sub">' + (r.kategori||'') + ' &middot; ' + fmtRupiah(r.estimasi_nilai) + '</div></td>' +

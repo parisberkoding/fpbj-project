@@ -417,11 +417,6 @@ function renderDashboard() {
         '<button class="btn btn-outline" onclick="loadPage(\'dashboard\')"><i class="bi bi-arrow-clockwise"></i> Refresh</button>' +
       '</div></div>' +
       '<div class="stats-grid">' + _buildDashStats(d, role) + '</div>' +
-      '<div class="card" style="margin-bottom:20px">' +
-        '<div class="card-header"><div><div class="card-title">Alur Proses Pengadaan</div>' +
-        '<div class="card-sub">4 tahap utama secara berurutan</div></div></div>' +
-        _buildFlowTimeline() +
-      '</div>' +
       _buildDashTable(d, role);
   });
 }
@@ -560,7 +555,7 @@ function _renderRencanaTable(data) {
   var rows = data.map(function(r) {
     var canReview = (r.status === 'PENDING') && (role === 'GM' || role === 'TIM_SURVEY' || role === 'ADMIN');
     var canSap    = (r.status === 'APPROVED') && (role === 'USER' || role === 'ADMIN');
-    var docBtn    = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i></a>' : '';
+    var docBtn    = r.link_dokumen_fpbj ? '<button class="btn btn-sm btn-outline" onclick="_viewRencanaDetail(\'' + r.kode_rencana + '\')"><i class="bi bi-file-earmark-pdf"></i></button>' : '';
     return '<tr>' +
       '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
       '<td><div class="table-title">' + r.judul + '</div>' +
@@ -828,7 +823,7 @@ function renderApprovalRencana() {
     } else {
       var trs = items.map(function(r) {
         var myStatus = role === 'GM' ? (r.gm_approval||'PENDING') : (r.survey_approval||'PENDING');
-        var docBtn   = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i> Dok</a>' : '';
+        var docBtn   = r.link_dokumen_fpbj ? '<button class="btn btn-sm btn-outline" onclick="_viewRencanaDetail(\'' + r.kode_rencana + '\')"><i class="bi bi-file-earmark-pdf"></i> Dok</button>' : '';
         return '<tr>' +
           '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
           '<td><div class="table-title">' + r.judul + '</div>' +
@@ -979,9 +974,12 @@ var _approvedRencanaList = [];
 var _selectedKodeRencana = '';
 
 function renderFormTender() {
-  // Kick off data load
+  // Load approved rencana and render list immediately
   api('getRencanaList', {page:1, limit:100, filter:{status:'APPROVED'}}).then(function(res) {
-    if (res.success) _approvedRencanaList = res.data;
+    if (res.success) {
+      _approvedRencanaList = res.data;
+      _renderApprovedList(_approvedRencanaList);
+    }
   });
 
   return '<div class="page-header">' +
@@ -993,9 +991,9 @@ function renderFormTender() {
         '<div class="form-group"><label class="form-label">Cari Kode / Judul</label>' +
           '<div style="position:relative">' +
             '<i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#a0aec0;font-size:14px"></i>' +
-            '<input type="text" class="form-input" style="padding-left:36px" id="searchRenc" placeholder="Ketik kode atau judul..." oninput="_searchRencForTender()">' +
+            '<input type="text" class="form-input" style="padding-left:36px" id="searchRenc" placeholder="Filter kode atau judul..." oninput="_filterRencForTender()">' +
           '</div></div>' +
-        '<div id="rencanaOptions"><div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px;color:var(--text-muted)">Ketik untuk mencari</div></div></div>' +
+        '<div id="rencanaOptions"><div class="empty-state" style="padding:24px"><div class="empty-icon"><i class="bi bi-hourglass" style="font-size:28px"></i></div><div class="empty-title" style="font-size:13px">Memuat rencana...</div></div></div>' +
         '<div id="selectedRencana" style="display:none;margin-top:12px;padding:14px;background:#EFF5FF;border-radius:10px;border:1px solid #c5d9f5">' +
           '<div style="font-size:11.5px;font-weight:700;color:var(--geo-blue-dk);margin-bottom:6px"><i class="bi bi-check-circle-fill"></i> Rencana Dipilih</div>' +
           '<div id="selectedRencanaInfo"></div>' +
@@ -1012,15 +1010,23 @@ function renderFormTender() {
     '</div>';
 }
 
-function _searchRencForTender() {
-  var q  = (document.getElementById('searchRenc').value || '').toLowerCase();
-  var el = document.getElementById('rencanaOptions');
-  if (!q) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px;color:var(--text-muted)">Ketik untuk mencari</div></div>'; return; }
+window._postRender_tender_baru = function() {
+  _renderApprovedList(_approvedRencanaList);
+};
+
+function _filterRencForTender() {
+  var q = (document.getElementById('searchRenc').value || '').toLowerCase();
   var filtered = _approvedRencanaList.filter(function(r) {
-    return (r.kode_rencana||'').toLowerCase().indexOf(q) !== -1 || (r.judul||'').toLowerCase().indexOf(q) !== -1;
+    return !q || (r.kode_rencana||'').toLowerCase().indexOf(q) !== -1 || (r.judul||'').toLowerCase().indexOf(q) !== -1;
   });
-  if (!filtered.length) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px">Tidak ada rencana APPROVED ditemukan</div></div>'; return; }
-  el.innerHTML = filtered.map(function(r) {
+  _renderApprovedList(filtered);
+}
+
+function _renderApprovedList(list) {
+  var el = document.getElementById('rencanaOptions');
+  if (!el) return;
+  if (!list.length) { el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-title" style="font-size:13px">Tidak ada rencana APPROVED ditemukan</div></div>'; return; }
+  el.innerHTML = list.map(function(r) {
     return '<div onclick="_selectRencForTender(\'' + r.kode_rencana + '\',\'' + (r.judul||'').replace(/'/g,'') + '\',\'' + (r.kategori||'') + '\',\'' + fmtRupiah(r.estimasi_nilai) + '\')" ' +
       'style="padding:12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;gap:12px" ' +
       'onmouseover="this.style.background=\'#EFF5FF\'" onmouseout="this.style.background=\'\'">' +
@@ -1328,6 +1334,24 @@ function renderRencanaDetail() {
         _infoRow('Nomor PR SAP', r.nomer_pr_sap || '<span style="color:var(--text-muted)">Belum diisi</span>') +
         _infoRow('Dokumen FPBJ', r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i> Lihat Dokumen</a>' : '<span style="color:var(--text-muted)">Belum diupload</span>') +
       '</table></div>';
+
+    // ── PDF VIEWER — Embedded document preview ──
+    if (r.link_dokumen_fpbj) {
+      var pdfUrl = r.link_dokumen_fpbj;
+      // Convert Google Drive link to preview URL
+      var fileIdMatch = pdfUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      var previewUrl = fileIdMatch
+        ? 'https://drive.google.com/file/d/' + fileIdMatch[1] + '/preview'
+        : 'https://docs.google.com/gview?url=' + encodeURIComponent(pdfUrl) + '&embedded=true';
+
+      html += '<div class="card" style="margin-bottom:20px">' +
+        '<div class="card-header"><div><div class="card-title"><i class="bi bi-file-earmark-pdf" style="color:var(--geo-red)"></i> Dokumen FPBJ</div>' +
+        '<div class="card-sub">Preview dokumen pengajuan</div></div>' +
+        '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-box-arrow-up-right"></i> Buka di Tab Baru</a></div>' +
+        '<div style="border-radius:10px;overflow:hidden;border:1px solid var(--border)">' +
+        '<iframe src="' + previewUrl + '" style="width:100%;height:600px;border:none" allowfullscreen></iframe>' +
+        '</div></div>';
+    }
 
     // Right: Upload Dokumen (for USER) or Approval Info
     if (APP.user.role === 'USER' || APP.user.role === 'ADMIN') {
