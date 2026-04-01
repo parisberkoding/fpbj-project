@@ -4,6 +4,7 @@
  * Pure ES5 - no arrow functions, no spread, no destructuring
  *
  * ROLES:
+ *   ADMIN      - Super Admin: full CRUD, user management, create rencana, approve, dll
  *   USER       - Pengusul: buat rencana, input PR SAP / PO SAP / SA-GR, upload dokumen
  *   TIM_SURVEY - Market Survey: review harga & referensi vendor
  *   SCM        - Procurement: update progress & notes pengadaan
@@ -27,6 +28,7 @@ var SHEETS = {
 };
 
 var ROLES = {
+  ADMIN:      'ADMIN',
   USER:       'USER',
   TIM_SURVEY: 'TIM_SURVEY',
   SCM:        'SCM',
@@ -82,6 +84,7 @@ function doGet(e) {
   var token = (e && e.parameter && e.parameter.token) ? e.parameter.token : '';
   var url   = ScriptApp.getService().getUrl();
 
+  // If page=login or no token -> show login
   if (page === 'login' || !token) {
     var t = HtmlService.createTemplateFromFile('login');
     t.webAppUrl = url;
@@ -91,6 +94,7 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
+  // Verify session
   var session = verifySession(token);
   if (!session) {
     var t2 = HtmlService.createTemplateFromFile('login');
@@ -101,6 +105,7 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
+  // Render main app with the requested page
   var tmpl = HtmlService.createTemplateFromFile('maincontent');
   tmpl.initialPage = page;
   tmpl.sessionJson = JSON.stringify(session);
@@ -162,11 +167,6 @@ function handleLogout(token) {
 // SESSION MANAGEMENT
 // ============================================================
 
-/**
- * verifySession — diperbaiki untuk handle:
- * 1. is_active tersimpan sebagai boolean ATAU string "TRUE"/"FALSE"
- * 2. expires_at tersimpan sebagai ISO string ATAU Date object (konversi Google Sheets)
- */
 function verifySession(token) {
   if (!token) return null;
   try {
@@ -176,21 +176,16 @@ function verifySession(token) {
       var row = data[i];
       if (row[0] !== token) continue;
 
-      // FIX 1: is_active bisa boolean true/false atau string "TRUE"/"FALSE"
       var isActive = (row[8] === true || String(row[8]).toLowerCase() === 'true');
       if (!isActive) return null;
 
-      // FIX 2: expires_at bisa Date object (konversi otomatis Google Sheets) atau ISO string
       var expiresAt;
       if (row[7] instanceof Date) {
         expiresAt = row[7];
       } else {
         expiresAt = new Date(row[7]);
       }
-      if (isNaN(expiresAt.getTime())) {
-        Logger.log('verifySession: expires_at tidak valid untuk token ' + token.substring(0, 16));
-        return null;
-      }
+      if (isNaN(expiresAt.getTime())) return null;
       if (new Date() > expiresAt) return null;
 
       return {
@@ -209,16 +204,19 @@ function verifySession(token) {
 }
 
 // ============================================================
-// ROUTER - if/else chain, no object map (avoids parser bug)
+// ROUTER
 // ============================================================
 
 function _routeAction(action, session, payload) {
-  // Auth
+  // Auth & Profile
   if (action === 'changePassword')        return changePassword(session, payload);
+  if (action === 'getUserProfile')        return getUserProfile(session);
+  if (action === 'updateUserProfile')     return updateUserProfile(session, payload);
 
   // Rencana
   if (action === 'createRencana')         return createRencana(session, payload);
   if (action === 'updateRencana')         return updateRencana(session, payload);
+  if (action === 'deleteRencana')         return deleteRencana(session, payload);
   if (action === 'getRencanaList')        return getRencanaList(session, payload);
   if (action === 'getRencanaDetail')      return getRencanaDetail(session, payload);
   if (action === 'uploadDokumenRencana')  return uploadDokumenRencana(session, payload);
@@ -231,7 +229,7 @@ function _routeAction(action, session, payload) {
   // Tender
   if (action === 'createTender')          return createTender(session, payload);
   if (action === 'updateTenderProgress')  return updateTenderProgress(session, payload);
-  if (action === 'updateTenderStatus')    return updateTenderProgress(session, payload); // alias
+  if (action === 'updateTenderStatus')    return updateTenderProgress(session, payload);
   if (action === 'updatePOData')          return updatePOData(session, payload);
   if (action === 'getTenderList')         return getTenderList(session, payload);
   if (action === 'getTenderDetail')       return getTenderDetail(session, payload);
@@ -251,7 +249,7 @@ function _routeAction(action, session, payload) {
   if (action === 'getDeliveryList')       return getDeliveryList(session, payload);
   if (action === 'uploadDokumenDelivery') return uploadDokumenDelivery(session, payload);
 
-  // Admin - GM only
+  // Admin - GM & ADMIN
   if (action === 'getUsers')              return getUsers(session);
   if (action === 'createUser')            return createUser(session, payload);
   if (action === 'updateUser')            return updateUser(session, payload);
@@ -312,20 +310,6 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-function getViewHtml(filename) {
-  try {
-    var content = HtmlService.createHtmlOutputFromFile(filename).getContent();
-    content = content.replace(/<script[\s\S]*?<\/script>/gi, '');
-    content = content.replace(/<style[\s\S]*?<\/style>/gi, '');
-    content = content.replace(/<link[^>]*>/gi, '');
-    return content;
-  } catch (e) {
-    Logger.log('getViewHtml error for ' + filename + ': ' + e.message);
-    return '<div style="padding:24px;background:#fff0f0;border-radius:12px;color:#CD142C;font-family:sans-serif">' +
-      '<strong>Gagal memuat: ' + filename + '</strong><br>' + e.message + '</div>';
-  }
-}
-
 function getSpreadsheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
 }
@@ -337,15 +321,11 @@ function getSheet(name) {
   return sheet;
 }
 
-/**
- * resetSessions — hapus semua baris session (kecuali header)
- * Dipanggil dari menu Spreadsheet atau manual
- */
 function resetSessions() {
   var sheet = getSheet(SHEETS.SESSIONS);
   var last  = sheet.getLastRow();
   if (last > 1) sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).clearContent();
-  try { SpreadsheetApp.getUi().alert('Semua sesi berhasil direset. Silakan login ulang.'); } catch(e) {}
+  try { SpreadsheetApp.getUi().alert('Semua sesi berhasil direset.'); } catch(e) {}
   Logger.log('Sessions reset OK.');
 }
 
@@ -372,6 +352,7 @@ function setupAndSeed() {
     SpreadsheetApp.getUi().alert(
       'Setup Berhasil!\n\n' +
       'Akun tersedia:\n' +
+      '- superadmin / SuperAdmin@123 (ADMIN)\n' +
       '- admin    / Admin@123   (GM)\n' +
       '- scm01    / Scm@12345   (SCM)\n' +
       '- survey01 / Survey@123  (Tim Survey)\n' +
@@ -483,6 +464,8 @@ function _seedUsers() {
 
   var ts    = now();
   var users = [
+    [generateId(),'ADM-2026-03-0001', 'Super Administrator','superadmin',
+     hashPassword('SuperAdmin@123'), ROLES.ADMIN,     'superadmin@geodipa.co.id','08100000000','IT & Digitalisasi',      true,ts,ts],
     [generateId(),'GM-2026-03-0001', 'Ir. Bambang Supriyadi, M.T.','admin',
      hashPassword('Admin@123'),  ROLES.GM,        'admin@geodipa.co.id',   '08111234567','General Management',     true,ts,ts],
     [generateId(),'SCM-2026-03-0001','Dian Kusuma Wardani',         'scm01',
@@ -495,7 +478,7 @@ function _seedUsers() {
      hashPassword('User@1234'),  ROLES.USER,      'user01@geodipa.co.id',  '08166789012','Operasi & Pemeliharaan', true,ts,ts],
     [generateId(),'USR-2026-03-0002','Rina Pratiwi Susanto',        'user02',
      hashPassword('User@1234'),  ROLES.USER,      'user02@geodipa.co.id',  '08177890123','Engineering',            true,ts,ts],
-    [generateId(),'USR-2026-03-0003','Faris Pradipta',              'faris',
+    [generateId(),'USR-2026-03-0003','Faris Iftikhar Alfarisi',              'faris',
      hashPassword('Faris@123'),  ROLES.USER,      'faris@geodipa.co.id',   '08188901234','IT & Digitalisasi',      true,ts,ts]
   ];
 
@@ -550,7 +533,6 @@ function _seedDemoRencana() {
 
   for (var i = 0; i < rencanas.length; i++) rSheet.appendRow(rencanas[i]);
 
-  // Status logs
   var sSheet = getSheet(SHEETS.RENCANA_STATUS);
   if (sSheet.getLastRow() <= 1) {
     var logs = [

@@ -1,18 +1,3 @@
-// ES5 helper - simulate Object.values
-function objectValues(obj) {
-  var vals = [];
-  for (var k in obj) { if (obj.hasOwnProperty(k)) vals.push(obj[k]); }
-  return vals;
-}
-
-// requireFields - validate required payload fields
-function requireFields(payload, fields) {
-  for (var i = 0; i < fields.length; i++) {
-    if (payload[fields[i]] === undefined || payload[fields[i]] === '') {
-      throw new Error('Field wajib tidak lengkap: ' + fields[i]);
-    }
-  }
-}
 /**
  * ============================================================
  * contract.gs - Contract Management
@@ -32,7 +17,7 @@ var CONTRACT_TAHAP = {
   FINAL:         'FINAL',
   TTD_GM:        'TTD_GM',
   TTD_VENDOR:    'TTD_VENDOR',
-  SELESAI:       'SELESAI',
+  SELESAI:       'SELESAI'
 };
 
 // https://drive.google.com/drive/folders/1qBZOELN4yJgg4-vxStNWtfhOGhwU96Em?hl=ID
@@ -40,16 +25,16 @@ var DRIVE_FOLDER_CONTRACT = '1qBZOELN4yJgg4-vxStNWtfhOGhwU96Em';
 
 // -- Create Contract -------------------------------------------
 function createContract(session, payload) {
-  requireRole(session, [ROLES.SCM]);
+  requireRole(session, [ROLES.SCM, ROLES.ADMIN]);
   requireFields(payload, ['kode_tender']);
 
-  var kode_tender = payload.kode_tender;
-var nama_vendor = payload.nama_vendor;
-var nilai_kontrak = payload.nilai_kontrak;
-var tanggal_mulai = payload.tanggal_mulai;
-var tanggal_selesai = payload.tanggal_selesai;
+  var kode_tender    = payload.kode_tender;
+  var nama_vendor    = payload.nama_vendor;
+  var nilai_kontrak  = payload.nilai_kontrak;
+  var tanggal_mulai  = payload.tanggal_mulai;
+  var tanggal_selesai = payload.tanggal_selesai;
 
-  // Validate tender exists and has PO
+  // Validate tender exists and has been approved
   var tender = getRowByField(SHEETS.TENDER, 'kode_tender', kode_tender);
   if (!tender) return { success: false, message: 'Tender tidak ditemukan.' };
 
@@ -57,8 +42,15 @@ var tanggal_selesai = payload.tanggal_selesai;
     return { success: false, message: 'Tender belum selesai. Status harus APPROVED untuk membuat kontrak.' };
   }
 
-  var existingContract = sheetToObjects(SHEETS.CONTRACT)
-    .find(function(c) { return c.kode_tender === kode_tender; });
+  // Check duplicate contract for same tender
+  var allContracts = sheetToObjects(SHEETS.CONTRACT);
+  var existingContract = null;
+  for (var ci = 0; ci < allContracts.length; ci++) {
+    if (allContracts[ci].kode_tender === kode_tender) {
+      existingContract = allContracts[ci];
+      break;
+    }
+  }
   if (existingContract) {
     return { success: false, message: 'Kontrak untuk tender ini sudah ada: ' + existingContract.kode_contract };
   }
@@ -92,30 +84,38 @@ var tanggal_selesai = payload.tanggal_selesai;
     success: true,
     message: 'Kontrak berhasil dibuat. Kode: ' + kode,
     kode_contract: kode,
-    id,
+    id: id
   };
 }
 
 // -- Update Contract Status ------------------------------------
 function updateContractStatus(session, payload) {
-  requireRole(session, [ROLES.SCM, ROLES.GM]);
+  requireRole(session, [ROLES.SCM, ROLES.GM, ROLES.ADMIN]);
 
   var kode_contract = payload.kode_contract;
-var new_status = payload.new_status;
-var catatan = payload.catatan;
+  var new_status    = payload.new_status;
+  var catatan       = payload.catatan;
   requireFields(payload, ['kode_contract', 'new_status']);
 
-  if (!Object.values(CONTRACT_TAHAP).indexOf(new_status) !== -1) {
+  // Validate status
+  var validStatuses = ['DRAFTING', 'REVIEW', 'FINAL', 'TTD_GM', 'TTD_VENDOR', 'SELESAI'];
+  var statusValid = false;
+  for (var vi = 0; vi < validStatuses.length; vi++) {
+    if (validStatuses[vi] === new_status) { statusValid = true; break; }
+  }
+  if (!statusValid) {
     return { success: false, message: 'Status tidak valid.' };
   }
 
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
   if (!contract) return { success: false, message: 'Kontrak tidak ditemukan.' };
 
-  // Role guards per tahap
-  if ([CONTRACT_TAHAP.TTD_GM, CONTRACT_TAHAP.TTD_VENDOR].indexOf(new_status) !== -1) {
-    if (session.role !== ROLES.GM) {
-      return { success: false, message: 'Hanya GM yang bisa update tahap TTD.' };
+  // Role guards per tahap - ADMIN can do anything
+  if (session.role !== ROLES.ADMIN) {
+    if ([CONTRACT_TAHAP.TTD_GM, CONTRACT_TAHAP.TTD_VENDOR].indexOf(new_status) !== -1) {
+      if (session.role !== ROLES.GM) {
+        return { success: false, message: 'Hanya GM yang bisa update tahap TTD.' };
+      }
     }
   }
 
@@ -133,13 +133,13 @@ var catatan = payload.catatan;
 
 // -- Upload Dokumen Contract -----------------------------------
 function uploadDokumenContract(session, payload) {
-  requireRole(session, [ROLES.SCM, ROLES.GM]);
+  requireRole(session, [ROLES.SCM, ROLES.GM, ROLES.ADMIN]);
 
   var kode_contract = payload.kode_contract;
-var file_base64 = payload.file_base64;
-var file_name = payload.file_name;
-var mime_type = payload.mime_type;
-var doc_type = payload.doc_type;
+  var file_base64   = payload.file_base64;
+  var file_name     = payload.file_name;
+  var mime_type     = payload.mime_type;
+  var doc_type      = payload.doc_type;
   requireFields(payload, ['kode_contract', 'file_base64', 'file_name', 'mime_type', 'doc_type']);
 
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
@@ -151,19 +151,20 @@ var doc_type = payload.doc_type;
   var colMap = {
     'draft':  'link_dokumen_draft',
     'review': 'link_dokumen_review',
-    'final':  'link_dokumen_final',
+    'final':  'link_dokumen_final'
   };
 
   var col = colMap[doc_type];
   if (!col) return { success: false, message: 'doc_type tidak valid. Pilih: draft/review/final' };
 
-  var updates = { [col]: link };
+  var updates = {};
+  updates[col] = link;
 
   // Auto-advance status
   var tahapMap = {
     'draft':  CONTRACT_TAHAP.DRAFTING,
     'review': CONTRACT_TAHAP.REVIEW,
-    'final':  CONTRACT_TAHAP.FINAL,
+    'final':  CONTRACT_TAHAP.FINAL
   };
 
   updates.status = tahapMap[doc_type];
@@ -171,7 +172,7 @@ var doc_type = payload.doc_type;
   updateRowById(SHEETS.CONTRACT, contract.id, updates);
   _addContractStatusLog(kode_contract, contract.kode_tender, contract.kode_rencana, session, tahapMap[doc_type], 'Dokumen ' + doc_type + ' diupload.', link);
 
-  return { success: true, message: 'Dokumen ' + doc_type + ' berhasil diupload.', link };
+  return { success: true, message: 'Dokumen ' + doc_type + ' berhasil diupload.', link: link };
 }
 
 // -- Get Contract List -----------------------------------------
@@ -181,21 +182,39 @@ function getContractList(session, payload) {
   var page  = parseInt(payload.page  || 1);
   var limit = parseInt(payload.limit || 20);
 
-  var data = all;
+  var data = [];
+  var i;
 
-  if (role === ROLES.SCM) {
-    data = data.filter(function(r) { return r.kode_user_scm === session.kode_user; });
-  }
-
-  if (role === ROLES.USER) {
-    var myRencana = sheetToObjects(SHEETS.RENCANA)
-      .filter(function(r) { return r.kode_user_pengusul === session.kode_user; })
-      .map(function(r) { return r.kode_rencana; });
-    data = data.filter(function(r) { return myRencana.indexOf(r.kode_rencana) !== -1; });
+  // ADMIN and GM see all
+  if (role === ROLES.ADMIN || role === ROLES.GM) {
+    data = all;
+  } else if (role === ROLES.SCM) {
+    for (i = 0; i < all.length; i++) {
+      if (all[i].kode_user_scm === session.kode_user) data.push(all[i]);
+    }
+  } else if (role === ROLES.USER) {
+    var myRencanaList = sheetToObjects(SHEETS.RENCANA);
+    var myKodes = [];
+    for (i = 0; i < myRencanaList.length; i++) {
+      if (myRencanaList[i].kode_user_pengusul === session.kode_user) {
+        myKodes.push(myRencanaList[i].kode_rencana);
+      }
+    }
+    for (i = 0; i < all.length; i++) {
+      if (myKodes.indexOf(all[i].kode_rencana) !== -1) data.push(all[i]);
+    }
+  } else {
+    data = all;
   }
 
   var filter = payload.filter || {};
-  if (filter.status) data = data.filter(function(r) { return r.status === filter.status; });
+  if (filter.status) {
+    var filtered = [];
+    for (i = 0; i < data.length; i++) {
+      if (data[i].status === filter.status) filtered.push(data[i]);
+    }
+    data = filtered;
+  }
 
   data.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
 
@@ -205,7 +224,7 @@ function getContractList(session, payload) {
   return {
     success: true,
     data: items,
-    pagination: { page, limit, total, totalPage: Math.ceil(total / limit) }
+    pagination: { page: page, limit: limit, total: total, totalPage: Math.ceil(total / limit) }
   };
 }
 
@@ -217,14 +236,17 @@ function getContractDetail(session, payload) {
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
   if (!contract) return { success: false, message: 'Kontrak tidak ditemukan.' };
 
-  var logs = sheetToObjects(SHEETS.CONTRACT_STATUS)
-    .filter(function(s) { return s.kode_contract === kode_contract; })
-    .sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
+  var allLogs = sheetToObjects(SHEETS.CONTRACT_STATUS);
+  var logs = [];
+  for (var i = 0; i < allLogs.length; i++) {
+    if (allLogs[i].kode_contract === kode_contract) logs.push(allLogs[i]);
+  }
+  logs.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
 
   var tender  = getRowByField(SHEETS.TENDER,  'kode_tender',  contract.kode_tender);
   var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', contract.kode_rencana);
 
-  return { success: true, data: contract, status_logs: logs, tender, rencana };
+  return { success: true, data: contract, status_logs: logs, tender: tender, rencana: rencana };
 }
 
 // -- Internal Status Log ---------------------------------------
@@ -244,4 +266,20 @@ function _addContractStatusLog(kode_contract, kode_tender, kode_rencana, session
     link || '',
     now()
   ]);
+}
+
+// ES5 helper - simulate Object.values
+function objectValues(obj) {
+  var vals = [];
+  for (var k in obj) { if (obj.hasOwnProperty(k)) vals.push(obj[k]); }
+  return vals;
+}
+
+// requireFields - validate required payload fields
+function requireFields(payload, fields) {
+  for (var i = 0; i < fields.length; i++) {
+    if (payload[fields[i]] === undefined || payload[fields[i]] === '') {
+      throw new Error('Field wajib tidak lengkap: ' + fields[i]);
+    }
+  }
 }

@@ -399,7 +399,7 @@ function renderDashboard() {
     var role = APP.user.role;
     var date = new Date().toLocaleDateString('id-ID', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
 
-    var addBtn = role === 'USER'
+    var addBtn = (role === 'USER' || role === 'ADMIN')
       ? '<button class="btn btn-primary" onclick="loadPage(\'rencana-baru\')"><i class="bi bi-plus-lg"></i> Buat Rencana</button>'
       : '';
 
@@ -421,7 +421,12 @@ function renderDashboard() {
 
 function _buildDashStats(d, role) {
   var defs;
-  if (role === 'USER') {
+  if (role === 'ADMIN') {
+    defs = [{label:'Total Rencana',value:d.total_rencana||0,color:'blue',icon:'bi-clipboard-text'},
+            {label:'Total Tender',value:d.total_tender||0,color:'dark',icon:'bi-file-earmark-text'},
+            {label:'Total Kontrak',value:d.total_contract||0,color:'green',icon:'bi-file-earmark-check'},
+            {label:'Total User',value:d.total_users||0,color:'lime',icon:'bi-people'}];
+  } else if (role === 'USER') {
     defs = [{label:'Total Rencana',value:d.total_rencana||0,color:'blue',icon:'bi-clipboard-text'},
             {label:'Menunggu Review',value:d.pending||0,color:'lime',icon:'bi-hourglass-split'},
             {label:'Disetujui',value:d.approved||0,color:'green',icon:'bi-check-circle'},
@@ -431,13 +436,13 @@ function _buildDashStats(d, role) {
             {label:'Perlu Review',value:d.need_review||0,color:'red',icon:'bi-search'},
             {label:'Sudah Di-review',value:d.already_reviewed||0,color:'green',icon:'bi-check-circle'}];
   } else if (role === 'SCM') {
-    defs = [{label:'Total Rencana',value:d.total_rencana||0,color:'blue',icon:'bi-clipboard-text'},
+    defs = [{label:'Rencana Approved',value:d.total_rencana_approved||0,color:'blue',icon:'bi-clipboard-text'},
             {label:'Total Tender',value:d.total_tender||0,color:'dark',icon:'bi-file-earmark-text'},
             {label:'Tender Aktif',value:d.tender_active||0,color:'lime',icon:'bi-lightning-charge'},
             {label:'Perlu Tindakan',value:d.need_action||0,color:'red',icon:'bi-bell'}];
   } else {
     defs = [{label:'Total Rencana',value:d.total_rencana||0,color:'blue',icon:'bi-clipboard-text'},
-            {label:'Butuh Approval',value:d.pending_approval||0,color:'red',icon:'bi-bell'},
+            {label:'Butuh Approval',value:d.pending_rencana_approval||0,color:'red',icon:'bi-bell'},
             {label:'Sudah Disetujui',value:d.approved_rencana||0,color:'green',icon:'bi-check-circle'},
             {label:'Total Tender',value:d.total_tender||0,color:'dark',icon:'bi-file-earmark-text'}];
   }
@@ -493,7 +498,7 @@ function renderRencanaList() {
     if (!res.success) throw new Error(res.message);
     _allRencana = res.data;
 
-    var createBtn = APP.user.role === 'USER'
+    var createBtn = (APP.user.role === 'USER' || APP.user.role === 'ADMIN')
       ? '<button class="btn btn-primary" onclick="loadPage(\'rencana-baru\')"><i class="bi bi-plus-lg"></i> Buat Rencana</button>'
       : '';
 
@@ -546,8 +551,8 @@ function _renderRencanaTable(data) {
     return;
   }
   var rows = data.map(function(r) {
-    var canReview = (r.status === 'PENDING') && (role === 'GM' || role === 'TIM_SURVEY');
-    var canSap    = (r.status === 'APPROVED') && role === 'USER';
+    var canReview = (r.status === 'PENDING') && (role === 'GM' || role === 'TIM_SURVEY' || role === 'ADMIN');
+    var canSap    = (r.status === 'APPROVED') && (role === 'USER' || role === 'ADMIN');
     var docBtn    = r.link_dokumen_fpbj ? '<a href="' + r.link_dokumen_fpbj + '" target="_blank" class="btn btn-sm btn-outline"><i class="bi bi-file-earmark-pdf"></i></a>' : '';
     return '<tr>' +
       '<td><span class="table-code">' + r.kode_rencana + '</span></td>' +
@@ -584,7 +589,7 @@ function _openRencanaApproval(kode, judul) {
 }
 
 function _submitRencanaApproval(kode) {
-  api('approveRencana', {kode_rencana:kode, action:document.getElementById('approvalAction').value, catatan:document.getElementById('approvalNote').value})
+  api('approveRencana', {kode_rencana:kode, decision:document.getElementById('approvalAction').value, catatan:document.getElementById('approvalNote').value})
     .then(function(res) { closeModal(); showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('rencana-list'); });
 }
 
@@ -694,6 +699,7 @@ function renderApprovalRencana() {
     if (!res.success) throw new Error(res.message);
     var role  = APP.user.role;
     var items = res.data.filter(function(r) {
+      if (role === 'ADMIN')      return (!r.gm_approval || r.gm_approval === '' || r.gm_approval === 'PENDING') || (!r.survey_approval || r.survey_approval === '' || r.survey_approval === 'PENDING');
       if (role === 'GM')         return !r.gm_approval || r.gm_approval === '' || r.gm_approval === 'PENDING';
       if (role === 'TIM_SURVEY') return !r.survey_approval || r.survey_approval === '' || r.survey_approval === 'PENDING';
       return false;
@@ -750,7 +756,7 @@ function renderTenderList() {
     if (!res.success) throw new Error(res.message);
     _allTender = res.data;
     var role = APP.user.role;
-    var createBtn = role === 'SCM'
+    var createBtn = (role === 'SCM' || role === 'ADMIN')
       ? '<button class="btn btn-primary" onclick="loadPage(\'tender-baru\')"><i class="bi bi-plus-lg"></i> Buat Tender</button>'
       : '';
     return '<div class="page-header">' +
@@ -799,8 +805,8 @@ function _renderTenderTable(data) {
       '<td>' + badgeHtml(t.status_dokumen) + '</td>' +
       '<td style="font-size:11px;color:var(--text-muted)">' + fmtDate(t.created_at) + '</td>' +
       '<td><div class="table-action">' +
-        (role === 'SCM' ? '<button class="btn btn-sm btn-outline" onclick="_openProgressModal(\'' + t.kode_tender + '\',\'' + t.status_tahap + '\')"><i class="bi bi-pencil-square"></i> Update</button>' : '') +
-        (role === 'GM' && isApprTahap ? '<button class="btn btn-sm btn-warning" onclick="_openTenderApprovalModal(\'' + t.kode_tender + '\',\'' + t.status_tahap + '\')"><i class="bi bi-shield-check"></i> Approve</button>' : '') +
+        ((role === 'SCM' || role === 'ADMIN') ? '<button class="btn btn-sm btn-outline" onclick="_openProgressModal(\'' + t.kode_tender + '\',\'' + t.status_tahap + '\')"><i class="bi bi-pencil-square"></i> Update</button>' : '') +
+        (((role === 'GM' || role === 'ADMIN') && isApprTahap) ? '<button class="btn btn-sm btn-warning" onclick="_openTenderApprovalModal(\'' + t.kode_tender + '\',\'' + t.status_tahap + '\')"><i class="bi bi-shield-check"></i> Approve</button>' : '') +
       '</div></td></tr>';
   }).join('');
   wrap.innerHTML = '<div class="data-table-wrap"><table class="data-table">' +
@@ -848,7 +854,7 @@ function _openTenderApprovalModal(kodeTender, statusTahap) {
 }
 
 function _submitTenderApproval(kodeTender, docType) {
-  api('approveTender', {kode_tender:kodeTender, action:document.getElementById('tApAction').value, doc_type:docType, catatan:document.getElementById('tApNote').value})
+  api('approveTender', {kode_tender:kodeTender, decision:document.getElementById('tApAction').value, doc_type:docType, catatan:document.getElementById('tApNote').value})
     .then(function(res) { closeModal(); showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('tender-list'); });
 }
 
@@ -982,7 +988,7 @@ function renderApprovalTender() {
 }
 
 function _quickApprove(kodeTender, docType) {
-  api('approveTender', {kode_tender:kodeTender, action:'approve', doc_type:docType, catatan:''})
+  api('approveTender', {kode_tender:kodeTender, decision:'approve', doc_type:docType, catatan:''})
     .then(function(res) { showToast(res.message, res.success?'success':'error'); if (res.success) loadPage('approval-tender'); });
 }
 
@@ -1068,8 +1074,8 @@ function renderUserManagement() {
   return api('getUsers').then(function(res) {
     if (!res.success) throw new Error(res.message);
     var data = res.data;
-    var roleColors = {USER:'#EFF5FF', TIM_SURVEY:'#FAFAED', SCM:'#EFF5FF', GM:'#f5f5f5'};
-    var roleText   = {USER:'var(--geo-blue)', TIM_SURVEY:'#7a8b00', SCM:'var(--geo-blue)', GM:'#333'};
+    var roleColors = {ADMIN:'#fff0f0', USER:'#EFF5FF', TIM_SURVEY:'#FAFAED', SCM:'#EFF5FF', GM:'#f5f5f5'};
+    var roleText   = {ADMIN:'var(--geo-red)', USER:'var(--geo-blue)', TIM_SURVEY:'#7a8b00', SCM:'var(--geo-blue)', GM:'#333'};
 
     var inner = '';
     if (!data.length) {
@@ -1120,7 +1126,7 @@ function _openAddUser() {
       '<div class="form-group"><label class="form-label">Role *</label>' +
         '<select class="form-select" id="uRole">' +
         '<option value="USER">USER (Pengusul)</option><option value="TIM_SURVEY">TIM_SURVEY</option>' +
-        '<option value="SCM">SCM</option><option value="GM">GM</option></select></div>' +
+        '<option value="SCM">SCM</option><option value="GM">GM</option><option value="ADMIN">ADMIN</option></select></div>' +
       '<div class="form-group"><label class="form-label">Divisi</label><input type="text" class="form-input" id="uDivisi" placeholder="e.g. Engineering"></div>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +

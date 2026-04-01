@@ -14,7 +14,7 @@ var DELIVERY_TAHAP = {
   SA_GR:       'SA_GR',
   INVOICE:     'INVOICE',
   VERIFIKASI:  'VERIFIKASI',
-  SELESAI:     'SELESAI',
+  SELESAI:     'SELESAI'
 };
 
 // https://drive.google.com/drive/folders/18dsFRfKNbmKC0TcV05xmzaXmKRYSX7D8?hl=ID
@@ -22,15 +22,13 @@ var DRIVE_FOLDER_DELIVERY = '18dsFRfKNbmKC0TcV05xmzaXmKRYSX7D8';
 
 // -- Create Delivery -------------------------------------------
 function createDelivery(session, payload) {
-  if (session.role !== ROLES.SCM && session.role !== ROLES.USER) {
-    return { success: false, message: 'Akses ditolak.' };
-  }
+  requireRole(session, [ROLES.SCM, ROLES.USER, ROLES.ADMIN]);
   if (!payload.kode_contract) return { success: false, message: 'kode_contract wajib.' };
 
-  var kode_contract = payload.kode_contract;
-var kode_sagr = payload.kode_sagr;
-var tanggal_delivery = payload.tanggal_delivery;
-var catatan = payload.catatan;
+  var kode_contract    = payload.kode_contract;
+  var kode_sagr        = payload.kode_sagr;
+  var tanggal_delivery = payload.tanggal_delivery;
+  var catatan          = payload.catatan;
 
   var contract = getRowByField(SHEETS.CONTRACT, 'kode_contract', kode_contract);
   if (!contract) return { success: false, message: 'Kontrak tidak ditemukan.' };
@@ -68,17 +66,21 @@ var catatan = payload.catatan;
 
 // -- Update Delivery Status ------------------------------------
 function updateDeliveryStatus(session, payload) {
-  if (session.role !== ROLES.SCM && session.role !== ROLES.USER && session.role !== ROLES.GM) {
-    return { success: false, message: 'Akses ditolak.' };
-  }
+  requireRole(session, [ROLES.SCM, ROLES.USER, ROLES.GM, ROLES.ADMIN]);
 
   var kode_delivery = payload.kode_delivery;
-var new_status = payload.new_status;
-var catatan = payload.catatan;
-var kode_sagr = payload.kode_sagr;
+  var new_status    = payload.new_status;
+  var catatan       = payload.catatan;
+  var kode_sagr     = payload.kode_sagr;
   if (!payload.kode_delivery || !payload.new_status) return { success: false, message: 'kode_delivery dan new_status wajib.' };
 
-  if (!Object.keys(DELIVERY_TAHAP).some(function(k) { return DELIVERY_TAHAP[k] === new_status; })) {
+  // Validate status
+  var validTahap = false;
+  var tahapKeys = ['SA_GR', 'INVOICE', 'VERIFIKASI', 'SELESAI'];
+  for (var vi = 0; vi < tahapKeys.length; vi++) {
+    if (DELIVERY_TAHAP[tahapKeys[vi]] === new_status) { validTahap = true; break; }
+  }
+  if (!validTahap) {
     return { success: false, message: 'Status tidak valid.' };
   }
 
@@ -86,7 +88,7 @@ var kode_sagr = payload.kode_sagr;
   if (!delivery) return { success: false, message: 'Delivery tidak ditemukan.' };
 
   var updates = { status: new_status };
-  if (catatan)   updates.catatan  = catatan;
+  if (catatan)   updates.catatan   = catatan;
   if (kode_sagr) updates.kode_sagr = kode_sagr;
   if (new_status === DELIVERY_TAHAP.SELESAI) updates.updated_at = now();
 
@@ -98,15 +100,13 @@ var kode_sagr = payload.kode_sagr;
 
 // -- Upload Dokumen Delivery -----------------------------------
 function uploadDokumenDelivery(session, payload) {
-  if (session.role !== ROLES.SCM && session.role !== ROLES.USER) {
-    return { success: false, message: 'Akses ditolak.' };
-  }
+  requireRole(session, [ROLES.SCM, ROLES.USER, ROLES.ADMIN]);
 
   var kode_delivery = payload.kode_delivery;
-var file_base64 = payload.file_base64;
-var file_name = payload.file_name;
-var mime_type = payload.mime_type;
-var doc_type = payload.doc_type;
+  var file_base64   = payload.file_base64;
+  var file_name     = payload.file_name;
+  var mime_type     = payload.mime_type;
+  var doc_type      = payload.doc_type;
   if (!payload.kode_delivery || !payload.file_base64 || !payload.file_name || !payload.mime_type || !payload.doc_type) {
     return { success: false, message: 'Field wajib tidak lengkap.' };
   }
@@ -119,7 +119,7 @@ var doc_type = payload.doc_type;
 
   var colMap = {
     'invoice': 'link_dokumen_invoice',
-    'bast':    'link_dokumen_bast',
+    'bast':    'link_dokumen_bast'
   };
 
   var col = colMap[doc_type];
@@ -145,27 +145,49 @@ function getDeliveryList(session, payload) {
   var page  = parseInt(payload.page  || 1);
   var limit = parseInt(payload.limit || 20);
 
-  var data = all;
+  var data = [];
+  var i;
 
-  if (role === ROLES.SCM) {
-    data = data.filter(function(r) { return r.kode_user === session.kode_user; });
-  }
-
-  if (role === ROLES.USER) {
-    var myRencana = sheetToObjects(SHEETS.RENCANA)
-      .filter(function(r) { return r.kode_user_pengusul === session.kode_user; })
-      .map(function(r) { return r.kode_rencana; });
-    data = data.filter(function(r) { return myRencana.indexOf(r.kode_rencana) !== -1; });
+  // ADMIN and GM see all
+  if (role === ROLES.ADMIN || role === ROLES.GM) {
+    data = all;
+  } else if (role === ROLES.SCM) {
+    for (i = 0; i < all.length; i++) {
+      if (all[i].kode_user === session.kode_user) data.push(all[i]);
+    }
+  } else if (role === ROLES.USER) {
+    var myRencanaList = sheetToObjects(SHEETS.RENCANA);
+    var myKodes = [];
+    for (i = 0; i < myRencanaList.length; i++) {
+      if (myRencanaList[i].kode_user_pengusul === session.kode_user) {
+        myKodes.push(myRencanaList[i].kode_rencana);
+      }
+    }
+    for (i = 0; i < all.length; i++) {
+      if (myKodes.indexOf(all[i].kode_rencana) !== -1) data.push(all[i]);
+    }
+  } else {
+    data = all;
   }
 
   var filter = payload.filter || {};
-  if (filter.status) data = data.filter(function(r) { return r.status === filter.status; });
+  if (filter.status) {
+    var filtered = [];
+    for (i = 0; i < data.length; i++) {
+      if (data[i].status === filter.status) filtered.push(data[i]);
+    }
+    data = filtered;
+  }
   if (filter.search) {
     var q = filter.search.toLowerCase();
-    data = data.filter(function(r) {
-      return r.kode_delivery.toLowerCase().indexOf(q) !== -1 ||
-             (r.kode_sagr || '').toLowerCase().indexOf(q) !== -1;
-    });
+    var searched = [];
+    for (i = 0; i < data.length; i++) {
+      if (data[i].kode_delivery.toLowerCase().indexOf(q) !== -1 ||
+          (data[i].kode_sagr || '').toLowerCase().indexOf(q) !== -1) {
+        searched.push(data[i]);
+      }
+    }
+    data = searched;
   }
 
   data.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
@@ -181,10 +203,6 @@ function getDeliveryList(session, payload) {
 }
 
 // -- Get Full Tracing (by kode_rencana) ------------------------
-/**
- * Endpoint khusus untuk melacak seluruh perjalanan satu kode rencana
- * dari Rencana -> Tender -> Contract -> Delivery
- */
 function getFullTrace(session, payload) {
   var kode_rencana = payload.kode_rencana;
   if (!kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
@@ -192,11 +210,36 @@ function getFullTrace(session, payload) {
   var rencana  = getRowByField(SHEETS.RENCANA, 'kode_rencana', kode_rencana);
   var tender   = getRowByField(SHEETS.TENDER,   'kode_rencana', kode_rencana);
   var contract = tender ? getRowByField(SHEETS.CONTRACT, 'kode_tender', tender.kode_tender) : null;
-  var delivery = contract ? sheetToObjects(SHEETS.DELIVERY).filter(function(d) { return d.kode_contract === contract.kode_contract; }) : [];
 
-  var rencanaLogs  = sheetToObjects(SHEETS.RENCANA_STATUS).filter(function(s) { return s.kode_rencana === kode_rencana; });
-  var tenderLogs   = tender   ? sheetToObjects(SHEETS.TENDER_STATUS).filter(function(s) { return s.kode_tender === tender.kode_tender; }) : [];
-  var contractLogs = contract ? sheetToObjects(SHEETS.CONTRACT_STATUS).filter(function(s) { return s.kode_contract === contract.kode_contract; }) : [];
+  var delivery = [];
+  if (contract) {
+    var allDel = sheetToObjects(SHEETS.DELIVERY);
+    for (var i = 0; i < allDel.length; i++) {
+      if (allDel[i].kode_contract === contract.kode_contract) delivery.push(allDel[i]);
+    }
+  }
+
+  var rencanaLogs = [];
+  var allRLogs = sheetToObjects(SHEETS.RENCANA_STATUS);
+  for (var ri = 0; ri < allRLogs.length; ri++) {
+    if (allRLogs[ri].kode_rencana === kode_rencana) rencanaLogs.push(allRLogs[ri]);
+  }
+
+  var tenderLogs = [];
+  if (tender) {
+    var allTLogs = sheetToObjects(SHEETS.TENDER_STATUS);
+    for (var ti = 0; ti < allTLogs.length; ti++) {
+      if (allTLogs[ti].kode_tender === tender.kode_tender) tenderLogs.push(allTLogs[ti]);
+    }
+  }
+
+  var contractLogs = [];
+  if (contract) {
+    var allCLogs = sheetToObjects(SHEETS.CONTRACT_STATUS);
+    for (var ci = 0; ci < allCLogs.length; ci++) {
+      if (allCLogs[ci].kode_contract === contract.kode_contract) contractLogs.push(allCLogs[ci]);
+    }
+  }
 
   return {
     success: true,
@@ -205,7 +248,7 @@ function getFullTrace(session, payload) {
       rencana:  { data: rencana,  logs: rencanaLogs },
       tender:   { data: tender,   logs: tenderLogs },
       contract: { data: contract, logs: contractLogs },
-      delivery: { data: delivery },
+      delivery: { data: delivery }
     }
   };
 }
