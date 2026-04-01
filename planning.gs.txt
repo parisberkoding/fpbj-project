@@ -2,13 +2,11 @@
  * planning.gs - Tahap Perencanaan Pengadaan
  *
  * Flow:
- * 1. USER buat rencana + upload FPBJ
+ * 1. USER/ADMIN buat rencana + upload FPBJ
  * 2. Tim Survey review harga
- * 3. GM approve/reject/revise
+ * 3. GM/ADMIN approve/reject/revise
  * 4. USER input PR SAP setelah approved
  * 5. Masuk ke SCM untuk diproses ke Tender
- *
- * Approval yang dibutuhkan: GM + TIM_SURVEY (tidak ada FPBJ)
  */
 
 // ============================================================
@@ -16,8 +14,8 @@
 // ============================================================
 
 function createRencana(session, payload) {
-  if (session.role !== ROLES.USER) {
-    return { success: false, message: 'Hanya USER yang bisa membuat rencana.' };
+  if (session.role !== ROLES.USER && session.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya USER atau ADMIN yang bisa membuat rencana.' };
   }
 
   if (!payload.judul || !payload.kategori || !payload.estimasi_nilai) {
@@ -36,13 +34,13 @@ function createRencana(session, payload) {
     payload.estimasi_nilai,
     session.user_id, session.kode_user, session.nama_lengkap,
     payload.divisi || '',
-    '', '',               // col11: link_dokumen_fpbj, col12: link_dokumen_final
-    DOC_STATUS.DRAFT,     // col13: status
-    '', '', '',           // col14-16: gm_approval, gm_approve_at, gm_notes
-    '', '', '',           // col17-19: survey_approval, survey_approve_at, survey_notes
-    '', '', '',           // col20-22: fpbj_approval, fpbj_approve_at, fpbj_notes
-    '', '', '',           // col23-25: nomer_pr_sap, tanggal_approve_budget, budget_approval
-    now(), now(), '', ''  // col26-29: created_at, updated_at, closed_at, masuk_tender_at
+    '', '',
+    DOC_STATUS.DRAFT,
+    '', '', '',
+    '', '', '',
+    '', '', '',
+    '', '', '',
+    now(), now(), '', ''
   ]);
 
   _addRencanaLog(kode, session, DOC_STATUS.DRAFT, 'Rencana dibuat oleh pengusul.', '');
@@ -51,8 +49,8 @@ function createRencana(session, payload) {
 }
 
 function updateRencana(session, payload) {
-  if (session.role !== ROLES.USER) {
-    return { success: false, message: 'Hanya USER yang bisa mengedit rencana.' };
+  if (session.role !== ROLES.USER && session.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya USER atau ADMIN yang bisa mengedit rencana.' };
   }
   if (!payload.kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
 
@@ -63,11 +61,12 @@ function updateRencana(session, payload) {
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][H.kode_rencana] !== payload.kode_rencana) continue;
-    if (data[i][H.kode_user_pengusul] !== session.kode_user) {
+    // USER can only edit their own, ADMIN can edit any
+    if (session.role === ROLES.USER && data[i][H.kode_user_pengusul] !== session.kode_user) {
       return { success: false, message: 'Anda tidak memiliki akses untuk rencana ini.' };
     }
     var status = data[i][H.status];
-    if (status !== DOC_STATUS.DRAFT && status !== DOC_STATUS.REVISED) {
+    if (session.role !== ROLES.ADMIN && status !== DOC_STATUS.DRAFT && status !== DOC_STATUS.REVISED) {
       return { success: false, message: 'Rencana dengan status ' + status + ' tidak dapat diedit.' };
     }
     var fields = ['judul','deskripsi','kategori','estimasi_nilai'];
@@ -76,18 +75,38 @@ function updateRencana(session, payload) {
         sheet.getRange(i + 1, H[fields[f]] + 1).setValue(payload[fields[f]]);
       }
     }
+    // ADMIN can also update status directly
+    if (session.role === ROLES.ADMIN && payload.status !== undefined) {
+      sheet.getRange(i + 1, H.status + 1).setValue(payload.status);
+    }
     sheet.getRange(i + 1, H.updated_at + 1).setValue(now());
     return { success: true, message: 'Rencana berhasil diupdate.' };
   }
   return { success: false, message: 'Rencana tidak ditemukan.' };
 }
 
+function deleteRencana(session, payload) {
+  if (session.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya ADMIN yang bisa menghapus rencana.' };
+  }
+  if (!payload.kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
+
+  var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', payload.kode_rencana);
+  if (!rencana) return { success: false, message: 'Rencana tidak ditemukan.' };
+
+  var deleted = deleteRowById(SHEETS.RENCANA, rencana.id);
+  if (deleted) {
+    return { success: true, message: 'Rencana berhasil dihapus.' };
+  }
+  return { success: false, message: 'Gagal menghapus rencana.' };
+}
+
 // ============================================================
-// UPLOAD DOKUMEN (USER uploads their own docs)
+// UPLOAD DOKUMEN
 // ============================================================
 
 function uploadDokumenRencana(session, payload) {
-  if (session.role !== ROLES.USER && session.role !== ROLES.SCM) {
+  if (session.role !== ROLES.USER && session.role !== ROLES.SCM && session.role !== ROLES.ADMIN) {
     return { success: false, message: 'Akses ditolak.' };
   }
   if (!payload.kode_rencana || !payload.file_base64 || !payload.file_name || !payload.mime_type) {
@@ -107,7 +126,6 @@ function uploadDokumenRencana(session, payload) {
     sheet.getRange(i + 1, H[col] + 1).setValue(link);
     sheet.getRange(i + 1, H.updated_at + 1).setValue(now());
 
-    // Auto-change to PENDING when FPBJ doc uploaded
     if (col === 'link_dokumen_fpbj' && data[i][H.status] === DOC_STATUS.DRAFT) {
       sheet.getRange(i + 1, H.status + 1).setValue(DOC_STATUS.PENDING);
       _addRencanaLog(payload.kode_rencana, session, DOC_STATUS.PENDING, 'Dokumen pengajuan diupload, menunggu review.', link);
@@ -118,13 +136,12 @@ function uploadDokumenRencana(session, payload) {
 }
 
 // ============================================================
-// SAP DATA INPUT - USER only
-// Input: PR SAP Number, PO SAP Number (setelah tender selesai)
+// SAP DATA INPUT
 // ============================================================
 
 function updateSapData(session, payload) {
-  if (session.role !== ROLES.USER) {
-    return { success: false, message: 'Hanya USER yang bisa mengisi data SAP.' };
+  if (session.role !== ROLES.USER && session.role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya USER atau ADMIN yang bisa mengisi data SAP.' };
   }
   if (!payload.kode_rencana) return { success: false, message: 'kode_rencana wajib.' };
 
@@ -134,7 +151,7 @@ function updateSapData(session, payload) {
 
   for (var i = 1; i < data.length; i++) {
     if (data[i][H.kode_rencana] !== payload.kode_rencana) continue;
-    if (data[i][H.kode_user_pengusul] !== session.kode_user) {
+    if (session.role === ROLES.USER && data[i][H.kode_user_pengusul] !== session.kode_user) {
       return { success: false, message: 'Akses ditolak.' };
     }
 
@@ -152,29 +169,38 @@ function updateSapData(session, payload) {
 }
 
 // ============================================================
-// APPROVAL - GM and TIM_SURVEY only (no FPBJ)
+// APPROVAL - GM, TIM_SURVEY, ADMIN
 // ============================================================
 
 function approveRencana(session, payload) {
   var role = session.role;
-  if (role !== ROLES.GM && role !== ROLES.TIM_SURVEY) {
-    return { success: false, message: 'Hanya GM atau Tim Survey yang bisa melakukan approval.' };
+  if (role !== ROLES.GM && role !== ROLES.TIM_SURVEY && role !== ROLES.ADMIN) {
+    return { success: false, message: 'Hanya GM, Tim Survey, atau ADMIN yang bisa melakukan approval.' };
   }
-  if (!payload.kode_rencana || !payload.action) {
-    return { success: false, message: 'kode_rencana dan action wajib.' };
+  var decision = payload.decision || payload.action;
+  if (!payload.kode_rencana || !decision) {
+    return { success: false, message: 'kode_rencana dan decision wajib.' };
   }
-  if (['approve','reject','revise'].indexOf(payload.action) === -1) {
-    return { success: false, message: 'Action harus: approve / reject / revise.' };
+  if (['approve','reject','revise'].indexOf(decision) === -1) {
+    return { success: false, message: 'Decision harus: approve / reject / revise.' };
   }
 
   var rencana = getRowByField(SHEETS.RENCANA, 'kode_rencana', payload.kode_rencana);
   if (!rencana) return { success: false, message: 'Rencana tidak ditemukan.' };
 
   var statusMap = { approve: DOC_STATUS.APPROVED, reject: DOC_STATUS.REJECTED, revise: DOC_STATUS.REVISED };
-  var newStatus = statusMap[payload.action];
+  var newStatus = statusMap[decision];
   var updates   = {};
 
-  if (role === ROLES.GM) {
+  // ADMIN approval counts as both GM and Survey approval
+  if (role === ROLES.ADMIN) {
+    updates.gm_approval     = newStatus;
+    updates.gm_approve_at   = now();
+    updates.gm_notes        = payload.catatan || '';
+    updates.survey_approval   = newStatus;
+    updates.survey_approve_at = now();
+    updates.survey_notes      = payload.catatan || '';
+  } else if (role === ROLES.GM) {
     updates.gm_approval   = newStatus;
     updates.gm_approve_at = now();
     updates.gm_notes      = payload.catatan || '';
@@ -184,12 +210,17 @@ function approveRencana(session, payload) {
     updates.survey_notes      = payload.catatan || '';
   }
 
-  // Check if both parties approved -> overall APPROVED
-  var gmOk     = (role === ROLES.GM         && newStatus === DOC_STATUS.APPROVED) ? true : (rencana.gm_approval     === DOC_STATUS.APPROVED);
-  var surveyOk = (role === ROLES.TIM_SURVEY  && newStatus === DOC_STATUS.APPROVED) ? true : (rencana.survey_approval === DOC_STATUS.APPROVED);
+  var gmOk, surveyOk;
+  if (role === ROLES.ADMIN) {
+    gmOk     = (newStatus === DOC_STATUS.APPROVED);
+    surveyOk = (newStatus === DOC_STATUS.APPROVED);
+  } else {
+    gmOk     = (role === ROLES.GM && newStatus === DOC_STATUS.APPROVED) ? true : (rencana.gm_approval === DOC_STATUS.APPROVED);
+    surveyOk = (role === ROLES.TIM_SURVEY && newStatus === DOC_STATUS.APPROVED) ? true : (rencana.survey_approval === DOC_STATUS.APPROVED);
+  }
 
   if (gmOk && surveyOk) {
-    updates.status         = DOC_STATUS.APPROVED;
+    updates.status          = DOC_STATUS.APPROVED;
     updates.masuk_tender_at = now();
   } else if (newStatus === DOC_STATUS.REJECTED) {
     updates.status = DOC_STATUS.REJECTED;
@@ -201,9 +232,9 @@ function approveRencana(session, payload) {
   _addRencanaLog(payload.kode_rencana, session, newStatus, payload.catatan || '', '');
 
   var allApproved = (gmOk && surveyOk);
-  var msg = payload.action === 'approve'
+  var msg = decision === 'approve'
     ? 'Disetujui oleh ' + role + (allApproved ? '. Rencana siap masuk Tender.' : '. Menunggu approval pihak lain.')
-    : payload.action === 'reject' ? 'Ditolak oleh ' + role + '.'
+    : decision === 'reject' ? 'Ditolak oleh ' + role + '.'
     : 'Dikembalikan untuk revisi oleh ' + role + '.';
 
   return { success: true, message: msg, all_approved: allApproved };
@@ -223,23 +254,31 @@ function getRencanaList(session, payload) {
 
   // USER only sees their own
   if (role === ROLES.USER) {
-    data = data.filter(function(r) { return r.kode_user_pengusul === session.kode_user; });
+    var filtered = [];
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].kode_user_pengusul === session.kode_user) filtered.push(data[i]);
+    }
+    data = filtered;
   }
-
-  // SCM sees all approved+ rencana (that have entered tender pipeline)
-  if (role === ROLES.SCM) {
-    // SCM sees everything to monitor
-  }
+  // ADMIN, SCM, GM, TIM_SURVEY see all
 
   if (filter.status) {
-    data = data.filter(function(r) { return r.status === filter.status; });
+    var statusFiltered = [];
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].status === filter.status) statusFiltered.push(data[i]);
+    }
+    data = statusFiltered;
   }
   if (filter.search) {
     var q = filter.search.toLowerCase();
-    data = data.filter(function(r) {
-      return (r.judul || '').toLowerCase().indexOf(q) !== -1 ||
-             (r.kode_rencana || '').toLowerCase().indexOf(q) !== -1;
-    });
+    var searchFiltered = [];
+    for (var i = 0; i < data.length; i++) {
+      if ((data[i].judul || '').toLowerCase().indexOf(q) !== -1 ||
+          (data[i].kode_rencana || '').toLowerCase().indexOf(q) !== -1) {
+        searchFiltered.push(data[i]);
+      }
+    }
+    data = searchFiltered;
   }
 
   data.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
@@ -259,9 +298,12 @@ function getRencanaDetail(session, payload) {
 
   _trackView(session, payload.kode_rencana, 0);
 
-  var logs = sheetToObjects(SHEETS.RENCANA_STATUS)
-    .filter(function(s) { return s.kode_rencana === payload.kode_rencana; })
-    .sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
+  var allLogs = sheetToObjects(SHEETS.RENCANA_STATUS);
+  var logs = [];
+  for (var i = 0; i < allLogs.length; i++) {
+    if (allLogs[i].kode_rencana === payload.kode_rencana) logs.push(allLogs[i]);
+  }
+  logs.sort(function(a, b) { return b.created_at > a.created_at ? 1 : -1; });
 
   return { success: true, data: rencana, status_logs: logs };
 }
@@ -298,7 +340,6 @@ function _trackView(session, kode_rencana, durationSec) {
     return { success: true, new_status: newStatus };
   }
 
-  // First view - create entry
   var id = generateId();
   sheet.appendRow([
     id, kode_rencana, session.user_id, session.kode_user, session.nama_lengkap, session.role,

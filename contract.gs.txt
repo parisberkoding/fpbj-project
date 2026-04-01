@@ -282,4 +282,8 @@ function requireFields(payload, fields) {
       throw new Error('Field wajib tidak lengkap: ' + fields[i]);
     }
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> e306efd2f92b4b8c2f2e1313b45311025094c4fd
